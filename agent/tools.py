@@ -1,4 +1,7 @@
+from agent.categories import CATEGORIES
 from agent.db import delete_expense, get_expenses, save_expense, update_expense
+
+_category_enum = {"type": "string", "enum": CATEGORIES}
 
 TOOL_DEFINITIONS = [
     {
@@ -8,7 +11,7 @@ TOOL_DEFINITIONS = [
             "type": "object",
             "properties": {
                 "amount":      {"type": "number", "description": "Amount in dollars"},
-                "category":    {"type": "string", "description": "e.g. Food, Transport, Entertainment"},
+                "category":   {**_category_enum, "description": "Expense category"},
                 "description": {"type": "string", "description": "Short description of the expense"},
                 "date":        {"type": "string", "description": "ISO date, e.g. 2025-01-13"},
             },
@@ -36,7 +39,7 @@ TOOL_DEFINITIONS = [
             "properties": {
                 "id":          {"type": "integer", "description": "The expense ID to update"},
                 "amount":      {"type": "number",  "description": "New amount in dollars"},
-                "category":    {"type": "string",  "description": "New category"},
+                "category":   {**_category_enum, "description": "New category"},
                 "description": {"type": "string",  "description": "New description"},
                 "date":        {"type": "string",  "description": "New ISO date"},
             },

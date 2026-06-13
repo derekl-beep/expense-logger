@@ -4,6 +4,7 @@ from datetime import date
 import anthropic
 from dotenv import load_dotenv
 
+from agent.categories import CATEGORY_HINTS
 from agent.tools import TOOL_DEFINITIONS, TOOL_HANDLERS
 
 load_dotenv()
@@ -12,8 +13,10 @@ client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
 
 SYSTEM = """You are a personal expense tracking assistant.
 When the user describes an expense, extract the details and call save_expense.
-Infer the category from context. Resolve vague dates like 'today' or 'yesterday'.
-Today's date is {today}. After saving, confirm with a friendly one-line message."""
+Resolve vague dates like 'today' or 'yesterday'. Today's date is {today}.
+After saving, confirm with a friendly one-line message.
+
+{category_hints}"""
 
 
 messages: list = []
@@ -26,7 +29,7 @@ def chat(user_input: str) -> str:
         response = client.messages.create(
             model="claude-sonnet-4-6",
             max_tokens=1024,
-            system=SYSTEM.format(today=date.today().isoformat()),
+            system=SYSTEM.format(today=date.today().isoformat(), category_hints=CATEGORY_HINTS),
             tools=TOOL_DEFINITIONS,
             messages=messages,
         )
