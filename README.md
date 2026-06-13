@@ -1,35 +1,47 @@
-# Expense Logger — Agentic Side Project
+# Expense Logger
 
-A personal expense tracker you interact with via natural language chat. You type things like _"$5 for coffee today"_ and an AI agent parses it, infers missing fields, and saves a structured row to a database.
+A personal expense tracker powered by an AI agent. Instead of filling out forms, you describe expenses in plain English — the agent parses them, infers missing fields, and saves structured rows to a database. You can also query your spending in natural language.
+
+> Built as a side project to explore how agentic AI changes the way we develop applications.
 
 ---
 
-## Why this is a good agentic project
+## Demo
 
-This isn't a form — it's an agent that must:
+| Chat | Expenses |
+|---|---|
+| _"$80 wine at LCBO"_ → saved under **Shopping** | Live table updates after every message |
+| _"how much did I spend this week?"_ → breakdown by category | Export to CSV anytime |
+| _"change my lunch to $15"_ → agent finds the row and updates it | Monthly summary with one click |
 
-- **Parse natural language** → extract amount, category, date, description
-- **Make decisions** → infer category ("coffee" → Food & Drink), resolve vague dates ("yesterday")
-- **Call a tool** → `save_expense()` writes to a DB
-- **Handle ambiguity** → ask a clarifying question when input is unclear
+---
 
-This is the classic **LLM + tool calling** pattern.
+## What makes this agentic
+
+This isn't a form with parsing logic — it's an agent that:
+
+- **Interprets natural language** — extracts amount, category, date, and description from free text
+- **Makes decisions** — infers category from context, resolves vague dates like "yesterday"
+- **Calls tools** — `save_expense`, `get_expenses`, `update_expense`, `delete_expense`
+- **Chains tool calls** — to update an expense, Claude first queries to find its ID, then updates it
+- **Handles ambiguity** — asks a follow-up question when input is unclear
+- **Maintains conversation history** — remembers context across turns in a session
 
 ---
 
 ## Architecture
 
 ```
-You (chat UI)
+React (chat UI)
+     ↓  HTTP + SSE (streaming)
+FastAPI
      ↓
-  Claude API  ←── system prompt + tool definitions
+Python agent — Claude API + tool definitions
      ↓
- tool_call: save_expense({ amount, category, date, description })
-     ↓
-  SQLite / Postgres
+SQLite
 ```
 
-There are 3 distinct layers you build:
+### The 3 layers of an agentic app
 
 | Layer | What it is | What you write |
 |---|---|---|
@@ -37,203 +49,113 @@ There are 3 distinct layers you build:
 | Tool definitions | JSON schemas | Contracts describing what functions exist |
 | Tool implementations | Python functions | Plain executors — write to DB, read from DB |
 
-### The Agent Loop
+### The agent loop
 
-One user message ≠ one LLM call. With tool use, each interaction is a multi-step cycle:
+One user message ≠ one LLM call. Each interaction is a cycle:
 
 ```
 1. Send user message to LLM
-2. LLM responds with a tool_call (not text yet)
+2. LLM responds with a tool_call
 3. Your code executes the tool
 4. Send the tool result back to LLM
-5. LLM generates a natural language response
+5. LLM generates a natural language response  ← streamed word by word
 ```
 
-Steps 2–4 can repeat. This loop is what makes the agent feel conversational — Claude sees the tool result before it responds, so it can say "Logged $5 for coffee on June 13" instead of just "saved."
-
----
-
-## How to Phase an LLM Project
-
-Phasing an LLM project is different from a regular app. The model handles what would take hundreds of lines of traditional parsing logic, so phases aren't about adding features — they're about **adding control and reliability**.
-
-| Phase | Goal | Question you're answering |
-|---|---|---|
-| 1 | Prove the model can do the core job | Can the LLM actually do what I need? |
-| 2 | Handle the real world | Is it robust to ambiguity and edge cases? |
-| 3 | Make it usable | Can a non-technical user interact with it? |
-| 4 | Trust and observability | Do I know when it goes wrong? |
-
-**What's different from a normal project:** MVP in an LLM app means minimum *prompt + tools* to prove the model handles the core task — not minimum features. You often ship Phase 1 in a single file. The risk of skipping phases is also different: skipping Phase 2 means the agent confidently does the wrong thing and you don't catch it until production.
-
----
-
-## Build Phases
-
-### Phase 1 — Core parsing + saving _(MVP start)_
-- Claude API with a `save_expense` tool defined
-- SQLite as the DB (zero setup, single file)
-- Python CLI as the interface
-- Goal: `"$5 coffee this morning"` → row in DB ✅
-
-### Phase 2 — Smarter agent _(MVP complete)_
-- Add `get_expenses` tool → agent can answer _"how much did I spend this week?"_
-- Implement the full agent loop so Claude sees tool results before responding
-- Handle ambiguity: agent asks for confirmation on unclear inputs
-- Add `update_expense` and `delete_expense` tools
-
-> **MVP target: Phase 1 + `get_expenses` from Phase 2.** This is the core loop that makes the app useful, not just a demo.
-
-### Phase 3 — Chat UI
-- Wrap in a React frontend or use Streamlit for speed
-- Show a live expense table alongside the chat
-- Persist conversation history for multi-turn context
-
-### Phase 4 — Stretch goals
-- Monthly summaries generated by the agent
-- Per-category budget limits with warnings
-- Export to CSV / Google Sheets via a new tool
-- Receipt image upload → Claude Vision parses the amount
-
----
-
-## DB Schema
-
-```sql
-CREATE TABLE IF NOT EXISTS expenses (
-  id          INTEGER PRIMARY KEY AUTOINCREMENT,
-  amount      REAL,
-  category    TEXT,
-  description TEXT,
-  date        TEXT,
-  created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-```
-
----
-
-## Phase 1 Starter Code
-
-```python
-# expense_agent.py
-import anthropic
-import sqlite3
-from datetime import date
-
-client = anthropic.Anthropic()
-
-# --- DB setup ---
-conn = sqlite3.connect("expenses.db")
-conn.execute("""
-  CREATE TABLE IF NOT EXISTS expenses (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    amount REAL,
-    category TEXT,
-    description TEXT,
-    date TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-  )
-""")
-
-# --- Tool definition ---
-tools = [
-  {
-    "name": "save_expense",
-    "description": "Save a parsed expense to the database",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "amount":      { "type": "number", "description": "Amount in dollars" },
-        "category":    { "type": "string", "description": "e.g. Food, Transport, Entertainment" },
-        "description": { "type": "string", "description": "Short description of the expense" },
-        "date":        { "type": "string", "description": "ISO date, e.g. 2025-01-13" }
-      },
-      "required": ["amount", "category", "description", "date"]
-    }
-  }
-]
-
-SYSTEM = """You are a personal expense tracking assistant.
-When the user describes an expense, extract the details and call save_expense.
-Infer the category from context. Resolve vague dates like 'today' or 'yesterday'.
-Today's date is {today}. After saving, confirm with a friendly one-line message."""
-
-def save_expense(amount, category, description, date):
-  conn.execute(
-    "INSERT INTO expenses (amount, category, description, date) VALUES (?, ?, ?, ?)",
-    (amount, category, description, date)
-  )
-  conn.commit()
-  return {"status": "saved"}
-
-def chat(user_input):
-  response = client.messages.create(
-    model="claude-sonnet-4-6",
-    max_tokens=1000,
-    system=SYSTEM.format(today=date.today().isoformat()),
-    tools=tools,
-    messages=[{"role": "user", "content": user_input}]
-  )
-
-  for block in response.content:
-    if block.type == "tool_use" and block.name == "save_expense":
-      save_expense(**block.input)
-      print(f"✅ Saved: {block.input}")
-      return
-
-  for block in response.content:
-    if hasattr(block, "text"):
-      print(f"Agent: {block.text}")
-
-# --- REPL ---
-while True:
-  user = input("You: ")
-  chat(user)
-```
-
----
-
-## What You'll Learn
-
-| Pattern | Where you'll encounter it |
-|---|---|
-| Tool / function calling | `save_expense` definition + execution |
-| NL → structured data | Parsing `"$5 coffee"` into typed fields |
-| Ambiguity handling | `"around $30"` or `"last Tuesday"` |
-| Multi-tool agents | Adding `get_expenses` for queries |
-| Conversation history | Remembering context across turns |
-| Evals | Does it always infer the right category? |
+Steps 2–4 repeat when multiple tools are needed (e.g. query then update).
 
 ---
 
 ## Tech Stack
 
-| Layer | Choice | Notes |
-|---|---|---|
-| LLM | Claude API (`claude-sonnet-4-6`) | — |
-| Language | Python | Best SDK support for AI projects |
-| Backend | FastAPI | Thin HTTP wrapper around the agent |
-| Frontend | React | Phase 3 only |
-| DB (dev) | SQLite | Zero setup, single file |
-| DB (prod) | Postgres | Easy swap — keep DB access code generic |
-| Package mgmt | `uv` | Modern and fast, replaces pip |
+| Layer | Choice |
+|---|---|
+| LLM | Claude API (`claude-sonnet-4-6`) |
+| Backend | Python + FastAPI |
+| Frontend | React + Vite |
+| Database | SQLite (dev) |
+| Package manager | `uv` |
+| Streaming | Server-sent events (SSE) |
+
+---
+
+## Project Structure
 
 ```
-React (chat UI)
-     ↓  HTTP
-FastAPI
-     ↓
-Python agent (Claude API + tools)
-     ↓
-SQLite / Postgres
+expense-logger/
+├── agent/
+│   ├── main.py         # agent loop + streaming
+│   ├── tools.py        # tool definitions + handler map
+│   ├── db.py           # SQLite queries
+│   └── categories.py   # fixed category list
+├── api/
+│   └── server.py       # FastAPI — /chat/stream, /expenses, /expenses/export
+└── frontend/
+    └── src/
+        ├── App.jsx
+        └── components/
+            ├── Chat.jsx
+            └── ExpenseTable.jsx
 ```
 
 ---
 
-## Next Steps
+## Getting Started
 
-1. `pip install anthropic` and run the Phase 1 script
-2. Log 5 real expenses manually
-3. Try to break it — use vague or ambiguous input
-4. Add a `get_expenses` tool so you can query your data in chat
-5. Wrap it in a simple UI
+### Prerequisites
+
+- Python 3.12+
+- Node.js 18+
+- [`uv`](https://github.com/astral-sh/uv) — `curl -LsSf https://astral.sh/uv/install.sh | sh`
+- An [Anthropic API key](https://console.anthropic.com)
+
+### Backend
+
+```bash
+# Install dependencies
+uv install
+
+# Set your API key
+echo "ANTHROPIC_API_KEY=sk-ant-..." > .env
+
+# Start the API server
+uv run uvicorn api.server:app --reload
+```
+
+### Frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Open `http://localhost:5173`.
+
+---
+
+## Key Patterns Demonstrated
+
+| Pattern | Where |
+|---|---|
+| Tool / function calling | `agent/tools.py` — schema + handler map |
+| Agent loop with tool results | `agent/main.py` — `chat()` and `stream_chat()` |
+| Streaming responses (SSE) | `api/server.py` → `Chat.jsx` |
+| Multi-tool chaining | Update/delete — Claude queries first, then acts |
+| Conversation history | `messages` list persisted across turns |
+| Constrained output | Category field uses JSON schema `enum` |
+| Prompt + schema separation | Category hints in system prompt, enforcement in tool schema |
+
+---
+
+## How to Phase an LLM Project
+
+Phasing an LLM project is different from a regular app. The model handles what would take hundreds of lines of traditional parsing logic, so phases are about **adding control and reliability**, not features.
+
+| Phase | Goal |
+|---|---|
+| 1 — Prove it works | Happy path end-to-end in a single file |
+| 2 — Handle the real world | Ambiguity, multi-tool, conversation history |
+| 3 — Make it usable | UI, streaming, responsive layout |
+| 4 — Polish | Fixed categories, summaries, CSV export |
+
+MVP = minimum *prompt + tools* to prove the model handles the core task. You can ship Phase 1 in ~50 lines of Python.
