@@ -1,5 +1,6 @@
 import csv
 import io
+import json
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -7,7 +8,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from agent.db import get_expenses
-from agent.main import chat
+from agent.main import chat, stream_chat
 
 app = FastAPI()
 
@@ -27,6 +28,16 @@ class ChatRequest(BaseModel):
 def chat_endpoint(req: ChatRequest):
     response = chat(req.message)
     return {"response": response}
+
+
+@app.post("/chat/stream")
+def chat_stream_endpoint(req: ChatRequest):
+    def generate():
+        for chunk in stream_chat(req.message):
+            yield f"data: {json.dumps({'text': chunk})}\n\n"
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(generate(), media_type="text/event-stream")
 
 
 @app.get("/expenses")

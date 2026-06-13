@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import Markdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 export default function Chat({ onExpenseChange }) {
   const [messages, setMessages] = useState([
@@ -12,24 +14,63 @@ export default function Chat({ onExpenseChange }) {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const send = async () => {
-    const text = input.trim();
+  const sendMessage = async (text, displayText = null) => {
     if (!text || loading) return;
 
-    setMessages((prev) => [...prev, { role: "user", text }]);
-    setInput("");
+    setMessages((prev) => [...prev, { role: "user", text: displayText ?? text }]);
     setLoading(true);
 
-    const res = await fetch("http://localhost:8000/chat", {
+    const res = await fetch("http://localhost:8000/chat/stream", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message: text }),
     });
-    const data = await res.json();
 
-    setMessages((prev) => [...prev, { role: "agent", text: data.response }]);
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+
+    setMessages((prev) => [...prev, { role: "agent", text: "" }]);
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      for (const line of decoder.decode(value).split("\n")) {
+        if (!line.startsWith("data: ")) continue;
+        const payload = line.slice(6);
+        if (payload === "[DONE]") break;
+        try {
+          const { text: chunk } = JSON.parse(payload);
+          setMessages((prev) => {
+            const updated = [...prev];
+            updated[updated.length - 1] = {
+              role: "agent",
+              text: updated[updated.length - 1].text + chunk,
+            };
+            return updated;
+          });
+        } catch {}
+      }
+    }
+
     setLoading(false);
     onExpenseChange();
+  };
+
+  const send = () => {
+    const text = input.trim();
+    if (!text) return;
+    setInput("");
+    sendMessage(text);
+  };
+
+  const sendMonthlySummary = () => {
+    const now = new Date();
+    const month = now.toLocaleString("default", { month: "long" });
+    const year = now.getFullYear();
+    const start = `${year}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+    const prompt = `Summarize my expenses from ${start} to today. Show a breakdown by category with amounts, a total, and one observation about my spending.`;
+    sendMessage(prompt, `Summarize ${month} ${year}`);
   };
 
   const onKeyDown = (e) => {
@@ -41,11 +82,16 @@ export default function Chat({ onExpenseChange }) {
 
   return (
     <div className="chat-panel">
-      <div className="chat-header">Expense Logger</div>
+      <div className="chat-header">
+        Expense Logger
+        <button className="summary-btn" onClick={sendMonthlySummary} disabled={loading}>
+          This Month
+        </button>
+      </div>
       <div className="chat-messages">
         {messages.map((m, i) => (
           <div key={i} className={`message ${m.role}`}>
-            {m.text}
+            {m.role === "agent" ? <Markdown remarkPlugins={[remarkGfm]}>{m.text}</Markdown> : m.text}
           </div>
         ))}
         {loading && <div className="message agent thinking">Thinking...</div>}

@@ -22,6 +22,19 @@ After saving, confirm with a friendly one-line message.
 messages: list = []
 
 
+def _run_tools(response_content: list) -> list:
+    tool_results = []
+    for block in response_content:
+        if block.type == "tool_use":
+            result = TOOL_HANDLERS[block.name](**block.input)
+            tool_results.append({
+                "type": "tool_result",
+                "tool_use_id": block.id,
+                "content": str(result),
+            })
+    return tool_results
+
+
 def chat(user_input: str) -> str:
     messages.append({"role": "user", "content": user_input})
 
@@ -42,17 +55,32 @@ def chat(user_input: str) -> str:
                     return block.text
 
         if response.stop_reason == "tool_use":
-            tool_results = []
-            for block in response.content:
-                if block.type == "tool_use":
-                    handler = TOOL_HANDLERS[block.name]
-                    result = handler(**block.input)
-                    tool_results.append({
-                        "type": "tool_result",
-                        "tool_use_id": block.id,
-                        "content": str(result),
-                    })
+            tool_results = _run_tools(response.content)
+            messages.append({"role": "user", "content": tool_results})
 
+
+def stream_chat(user_input: str):
+    messages.append({"role": "user", "content": user_input})
+
+    while True:
+        with client.messages.stream(
+            model="claude-sonnet-4-6",
+            max_tokens=1024,
+            system=SYSTEM.format(today=date.today().isoformat(), category_hints=CATEGORY_HINTS),
+            tools=TOOL_DEFINITIONS,
+            messages=messages,
+        ) as stream:
+            for chunk in stream.text_stream:
+                yield chunk
+            final = stream.get_final_message()
+
+        messages.append({"role": "assistant", "content": final.content})
+
+        if final.stop_reason == "end_turn":
+            break
+
+        if final.stop_reason == "tool_use":
+            tool_results = _run_tools(final.content)
             messages.append({"role": "user", "content": tool_results})
 
 
