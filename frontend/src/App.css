@@ -147,3 +147,17 @@ td {
   font-size: 14px;
   border-bottom: 1px solid #f0f0f0;
 }
+
+.export-btn {
+  padding: 6px 12px;
+  font-size: 13px;
+  background: #f0f0f0;
+  color: #333;
+  border-radius: 6px;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.export-btn:hover {
+  background: #e0e0e0;
+}

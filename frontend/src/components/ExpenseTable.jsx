@@ -5,7 +5,16 @@ export default function ExpenseTable({ expenses }) {
     <div className="table-panel">
       <div className="table-header">
         All Expenses
-        <span className="total">Total: ${total.toFixed(2)}</span>
+        <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+          <span className="total">Total: ${total.toFixed(2)}</span>
+          <a
+            href="http://localhost:8000/expenses/export"
+            download="expenses.csv"
+            className="export-btn"
+          >
+            Export CSV
+          </a>
+        </div>
       </div>
       <table>
         <thead>

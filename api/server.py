@@ -1,5 +1,9 @@
+import csv
+import io
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from agent.db import get_expenses
@@ -28,3 +32,18 @@ def chat_endpoint(req: ChatRequest):
 @app.get("/expenses")
 def expenses_endpoint():
     return get_expenses()
+
+
+@app.get("/expenses/export")
+def expenses_export():
+    rows = get_expenses()
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=["id", "date", "description", "category", "amount"])
+    writer.writeheader()
+    writer.writerows(rows)
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=expenses.csv"},
+    )
