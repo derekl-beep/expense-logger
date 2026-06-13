@@ -19,7 +19,7 @@ Today's date is {today}. After saving, confirm with a friendly one-line message.
 messages: list = []
 
 
-def chat(user_input: str) -> None:
+def chat(user_input: str) -> str:
     messages.append({"role": "user", "content": user_input})
 
     while True:
@@ -31,14 +31,12 @@ def chat(user_input: str) -> None:
             messages=messages,
         )
 
-        # Append assistant response to messages for the next loop iteration
         messages.append({"role": "assistant", "content": response.content})
 
         if response.stop_reason == "end_turn":
             for block in response.content:
                 if hasattr(block, "text"):
-                    print(f"Agent: {block.text}")
-            break
+                    return block.text
 
         if response.stop_reason == "tool_use":
             tool_results = []
@@ -52,7 +50,6 @@ def chat(user_input: str) -> None:
                         "content": str(result),
                     })
 
-            # Send tool results back to Claude to continue the loop
             messages.append({"role": "user", "content": tool_results})
 
 
@@ -62,7 +59,7 @@ if __name__ == "__main__":
         try:
             user = input("You: ").strip()
             if user:
-                chat(user)
+                print(f"Agent: {chat(user)}")
         except KeyboardInterrupt:
             print("\nBye!")
             break
