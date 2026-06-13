@@ -5,6 +5,7 @@ import "./App.css";
 
 export default function App() {
   const [expenses, setExpenses] = useState([]);
+  const [activeTab, setActiveTab] = useState("chat");
 
   const fetchExpenses = async () => {
     const res = await fetch("http://localhost:8000/expenses");
@@ -18,8 +19,29 @@ export default function App() {
 
   return (
     <div className="layout">
-      <Chat onExpenseChange={fetchExpenses} />
-      <ExpenseTable expenses={expenses} />
+      <div className="tab-bar">
+        <button
+          className={`tab-btn ${activeTab === "chat" ? "active" : ""}`}
+          onClick={() => setActiveTab("chat")}
+        >
+          Chat
+        </button>
+        <button
+          className={`tab-btn ${activeTab === "expenses" ? "active" : ""}`}
+          onClick={() => setActiveTab("expenses")}
+        >
+          Expenses
+        </button>
+      </div>
+
+      <Chat
+        className={activeTab !== "chat" ? "hidden-mobile" : ""}
+        onExpenseChange={() => { fetchExpenses(); setActiveTab("chat"); }}
+      />
+      <ExpenseTable
+        className={activeTab !== "expenses" ? "hidden-mobile" : ""}
+        expenses={expenses}
+      />
     </div>
   );
 }

@@ -1,8 +1,8 @@
-export default function ExpenseTable({ expenses }) {
+export default function ExpenseTable({ expenses, className = "" }) {
   const total = expenses.reduce((sum, e) => sum + e.amount, 0);
 
   return (
-    <div className="table-panel">
+    <div className={`table-panel ${className}`}>
       <div className="table-header">
         All Expenses
         <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>

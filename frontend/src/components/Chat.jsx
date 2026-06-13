@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
-export default function Chat({ onExpenseChange }) {
+export default function Chat({ onExpenseChange, className = "" }) {
   const [messages, setMessages] = useState([
     { role: "agent", text: "Hi! Log an expense or ask about your spending." },
   ]);
@@ -81,7 +81,7 @@ export default function Chat({ onExpenseChange }) {
   };
 
   return (
-    <div className="chat-panel">
+    <div className={`chat-panel ${className}`}>
       <div className="chat-header">
         Expense Logger
         <button className="summary-btn" onClick={sendMonthlySummary} disabled={loading}>

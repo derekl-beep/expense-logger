@@ -5,23 +5,90 @@
 }
 
 body {
-  background: #f5f5f5;
+  background: #f0f0f0;
+  font-family: sans-serif;
 }
 
 .layout {
   display: flex;
+  flex-direction: column;
   height: 100vh;
-  font-family: sans-serif;
+}
+
+@media (min-width: 768px) {
+  .layout {
+    width: 100%;
+    max-width: 1100px;
+    height: 85vh;
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 8px 40px rgba(0, 0, 0, 0.12);
+  }
+}
+
+/* Tab bar — mobile only */
+.tab-bar {
+  display: none;
+  border-bottom: 1px solid #e0e0e0;
+  background: #fff;
+}
+
+.tab-btn {
+  flex: 1;
+  padding: 12px;
+  font-size: 14px;
+  font-weight: 500;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  color: #888;
+}
+
+.tab-btn.active {
+  color: #0071e3;
+  border-bottom-color: #0071e3;
+}
+
+/* Desktop: side by side */
+@media (min-width: 768px) {
+  .layout {
+    flex-direction: row;
+  }
+
+  .tab-bar {
+    display: none;
+  }
+
+  .hidden-mobile {
+    display: flex;
+  }
+}
+
+/* Mobile: tabs */
+@media (max-width: 767px) {
+  .tab-bar {
+    display: flex;
+  }
+
+  .hidden-mobile {
+    display: none;
+  }
 }
 
 /* Chat panel */
 .chat-panel {
   display: flex;
   flex-direction: column;
-  width: 420px;
-  min-width: 420px;
   background: #fff;
   border-right: 1px solid #e0e0e0;
+}
+
+@media (min-width: 768px) {
+  .chat-panel {
+    width: 420px;
+    min-width: 420px;
+  }
 }
 
 .chat-header {
