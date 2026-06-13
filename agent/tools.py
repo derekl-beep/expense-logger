@@ -1,4 +1,4 @@
-from agent.db import get_expenses, save_expense
+from agent.db import delete_expense, get_expenses, save_expense, update_expense
 
 TOOL_DEFINITIONS = [
     {
@@ -28,9 +28,37 @@ TOOL_DEFINITIONS = [
             "required": [],
         },
     },
+    {
+        "name": "update_expense",
+        "description": "Update fields on an existing expense by its ID. First call get_expenses to find the ID.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "id":          {"type": "integer", "description": "The expense ID to update"},
+                "amount":      {"type": "number",  "description": "New amount in dollars"},
+                "category":    {"type": "string",  "description": "New category"},
+                "description": {"type": "string",  "description": "New description"},
+                "date":        {"type": "string",  "description": "New ISO date"},
+            },
+            "required": ["id"],
+        },
+    },
+    {
+        "name": "delete_expense",
+        "description": "Delete an expense by its ID. First call get_expenses to find the ID.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "id": {"type": "integer", "description": "The expense ID to delete"},
+            },
+            "required": ["id"],
+        },
+    },
 ]
 
 TOOL_HANDLERS = {
-    "save_expense": save_expense,
-    "get_expenses": get_expenses,
+    "save_expense":   save_expense,
+    "get_expenses":   get_expenses,
+    "update_expense": update_expense,
+    "delete_expense": delete_expense,
 }
