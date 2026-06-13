@@ -29,20 +29,60 @@ You (chat UI)
   SQLite / Postgres
 ```
 
+There are 3 distinct layers you build:
+
+| Layer | What it is | What you write |
+|---|---|---|
+| Agent | LLM + system prompt | Prompt that tells Claude how to think |
+| Tool definitions | JSON schemas | Contracts describing what functions exist |
+| Tool implementations | Python functions | Plain executors — write to DB, read from DB |
+
+### The Agent Loop
+
+One user message ≠ one LLM call. With tool use, each interaction is a multi-step cycle:
+
+```
+1. Send user message to LLM
+2. LLM responds with a tool_call (not text yet)
+3. Your code executes the tool
+4. Send the tool result back to LLM
+5. LLM generates a natural language response
+```
+
+Steps 2–4 can repeat. This loop is what makes the agent feel conversational — Claude sees the tool result before it responds, so it can say "Logged $5 for coffee on June 13" instead of just "saved."
+
+---
+
+## How to Phase an LLM Project
+
+Phasing an LLM project is different from a regular app. The model handles what would take hundreds of lines of traditional parsing logic, so phases aren't about adding features — they're about **adding control and reliability**.
+
+| Phase | Goal | Question you're answering |
+|---|---|---|
+| 1 | Prove the model can do the core job | Can the LLM actually do what I need? |
+| 2 | Handle the real world | Is it robust to ambiguity and edge cases? |
+| 3 | Make it usable | Can a non-technical user interact with it? |
+| 4 | Trust and observability | Do I know when it goes wrong? |
+
+**What's different from a normal project:** MVP in an LLM app means minimum *prompt + tools* to prove the model handles the core task — not minimum features. You often ship Phase 1 in a single file. The risk of skipping phases is also different: skipping Phase 2 means the agent confidently does the wrong thing and you don't catch it until production.
+
 ---
 
 ## Build Phases
 
-### Phase 1 — Core parsing + saving _(start here)_
+### Phase 1 — Core parsing + saving _(MVP start)_
 - Claude API with a `save_expense` tool defined
 - SQLite as the DB (zero setup, single file)
 - Python CLI as the interface
 - Goal: `"$5 coffee this morning"` → row in DB ✅
 
-### Phase 2 — Smarter agent
+### Phase 2 — Smarter agent _(MVP complete)_
 - Add `get_expenses` tool → agent can answer _"how much did I spend this week?"_
-- Add `update_expense` and `delete_expense` tools
+- Implement the full agent loop so Claude sees tool results before responding
 - Handle ambiguity: agent asks for confirmation on unclear inputs
+- Add `update_expense` and `delete_expense` tools
+
+> **MVP target: Phase 1 + `get_expenses` from Phase 2.** This is the core loop that makes the app useful, not just a demo.
 
 ### Phase 3 — Chat UI
 - Wrap in a React frontend or use Streamlit for speed
@@ -166,16 +206,27 @@ while True:
 
 ---
 
-## Suggested Stack
+## Tech Stack
 
-| Layer | Choice |
-|---|---|
-| LLM | Claude API (`claude-sonnet-4-6`) |
-| Language | Python |
-| DB (dev) | SQLite |
-| DB (prod) | Postgres |
-| UI (quick) | Streamlit |
-| UI (proper) | React + FastAPI |
+| Layer | Choice | Notes |
+|---|---|---|
+| LLM | Claude API (`claude-sonnet-4-6`) | — |
+| Language | Python | Best SDK support for AI projects |
+| Backend | FastAPI | Thin HTTP wrapper around the agent |
+| Frontend | React | Phase 3 only |
+| DB (dev) | SQLite | Zero setup, single file |
+| DB (prod) | Postgres | Easy swap — keep DB access code generic |
+| Package mgmt | `uv` | Modern and fast, replaces pip |
+
+```
+React (chat UI)
+     ↓  HTTP
+FastAPI
+     ↓
+Python agent (Claude API + tools)
+     ↓
+SQLite / Postgres
+```
 
 ---
 
