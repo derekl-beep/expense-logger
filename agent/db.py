@@ -23,3 +23,22 @@ def save_expense(amount: float, category: str, description: str, date: str) -> d
     )
     conn.commit()
     return {"status": "saved"}
+
+
+def get_expenses(start_date: str = None, end_date: str = None, category: str = None) -> list[dict]:
+    query = "SELECT id, amount, category, description, date FROM expenses WHERE 1=1"
+    params = []
+
+    if start_date:
+        query += " AND date >= ?"
+        params.append(start_date)
+    if end_date:
+        query += " AND date <= ?"
+        params.append(end_date)
+    if category:
+        query += " AND LOWER(category) = LOWER(?)"
+        params.append(category)
+
+    query += " ORDER BY date DESC"
+    rows = conn.execute(query, params).fetchall()
+    return [dict(row) for row in rows]

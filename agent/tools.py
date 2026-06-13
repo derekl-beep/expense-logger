@@ -1,4 +1,4 @@
-from agent.db import save_expense
+from agent.db import get_expenses, save_expense
 
 TOOL_DEFINITIONS = [
     {
@@ -14,9 +14,23 @@ TOOL_DEFINITIONS = [
             },
             "required": ["amount", "category", "description", "date"],
         },
-    }
+    },
+    {
+        "name": "get_expenses",
+        "description": "Query expenses from the database. Use this to answer questions about spending.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "start_date": {"type": "string", "description": "Filter from this ISO date (inclusive)"},
+                "end_date":   {"type": "string", "description": "Filter to this ISO date (inclusive)"},
+                "category":   {"type": "string", "description": "Filter by category name"},
+            },
+            "required": [],
+        },
+    },
 ]
 
 TOOL_HANDLERS = {
     "save_expense": save_expense,
+    "get_expenses": get_expenses,
 }
