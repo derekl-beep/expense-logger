@@ -40,7 +40,7 @@ def chat(user_input: str) -> str:
 
     while True:
         response = client.messages.create(
-            model="claude-sonnet-4-6",
+            model="claude-haiku-4-5-20251001",
             max_tokens=1024,
             system=SYSTEM.format(today=date.today().isoformat(), category_hints=CATEGORY_HINTS),
             tools=TOOL_DEFINITIONS,
@@ -64,7 +64,7 @@ def stream_chat(user_input: str):
 
     while True:
         with client.messages.stream(
-            model="claude-sonnet-4-6",
+            model="claude-haiku-4-5-20251001",
             max_tokens=1024,
             system=SYSTEM.format(today=date.today().isoformat(), category_hints=CATEGORY_HINTS),
             tools=TOOL_DEFINITIONS,

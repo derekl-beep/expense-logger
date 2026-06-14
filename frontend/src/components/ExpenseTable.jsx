@@ -33,6 +33,7 @@ const formatMonth = (ym) => {
 
 export default function ExpenseTable({ expenses, className = "", onExpenseChange }) {
   const [selectedMonth, setSelectedMonth] = useState("all");
+  const [flaggedOnly, setFlaggedOnly] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [editValues, setEditValues] = useState({});
   const [categories, setCategories] = useState([]);
@@ -47,8 +48,20 @@ export default function ExpenseTable({ expenses, className = "", onExpenseChange
     return Array.from(seen).sort().reverse();
   }, [expenses]);
 
-  const filtered = selectedMonth === "all" ? expenses : expenses.filter((e) => e.date.startsWith(selectedMonth));
+  const filtered = expenses
+    .filter((e) => selectedMonth === "all" || e.date.startsWith(selectedMonth))
+    .filter((e) => !flaggedOnly || e.flagged);
   const total = filtered.reduce((sum, e) => sum + e.amount, 0);
+
+  const toggleFlag = async (e, ev) => {
+    ev.stopPropagation();
+    await fetch(`http://localhost:8000/expenses/${e.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ flagged: !e.flagged }),
+    });
+    onExpenseChange();
+  };
 
   const startEdit = (e) => {
     setEditingId(e.id);
@@ -94,6 +107,16 @@ export default function ExpenseTable({ expenses, className = "", onExpenseChange
           </Select>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setFlaggedOnly((f) => !f)}
+            className={`h-7 px-2.5 text-xs inline-flex items-center gap-1 rounded-md border transition-colors ${
+              flaggedOnly
+                ? "border-amber-400 bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-700"
+                : "border-border text-muted-foreground hover:bg-muted"
+            }`}
+          >
+            ⚑ Flagged
+          </button>
           <span className="text-xs text-muted-foreground">
             Total: <span className="font-semibold text-foreground">${total.toFixed(2)}</span>
           </span>
@@ -114,12 +137,13 @@ export default function ExpenseTable({ expenses, className = "", onExpenseChange
               <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wide">Description</th>
               <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wide w-32">Category</th>
               <th className="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wide w-24">Amount</th>
+              <th className="w-8"></th>
               <th className="w-12"></th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
-              <tr><td colSpan={5} className="text-center py-16 text-muted-foreground text-sm">No expenses yet</td></tr>
+              <tr><td colSpan={6} className="text-center py-16 text-muted-foreground text-sm">No expenses yet</td></tr>
             ) : filtered.map((e) =>
               editingId === e.id ? (
                 <tr key={e.id} className="bg-muted border-b border-border">
@@ -141,6 +165,7 @@ export default function ExpenseTable({ expenses, className = "", onExpenseChange
                     <Input type="number" step="0.01" value={editValues.amount} className="h-7 text-xs text-right"
                       onChange={(ev) => setEditValues({ ...editValues, amount: parseFloat(ev.target.value) })} />
                   </td>
+                  <td></td>
                   <td className="px-3 py-2">
                     <div className="flex gap-1">
                       <button onClick={saveEdit} className="w-6 h-6 rounded text-xs bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">✓</button>
@@ -159,6 +184,16 @@ export default function ExpenseTable({ expenses, className = "", onExpenseChange
                     </span>
                   </td>
                   <td className="px-4 py-3 text-right text-sm font-medium text-foreground tabular-nums">${e.amount.toFixed(2)}</td>
+                  <td className="px-2 py-3">
+                    <button
+                      onClick={(ev) => toggleFlag(e, ev)}
+                      className={`w-6 h-6 rounded text-xs transition-all ${
+                        e.flagged
+                          ? "text-amber-500 dark:text-amber-400"
+                          : "opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-amber-500"
+                      }`}
+                    >⚑</button>
+                  </td>
                   <td className="px-3 py-3">
                     <button
                       className="opacity-0 group-hover:opacity-100 w-6 h-6 rounded text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all"

@@ -10,9 +10,14 @@ conn.execute("""
         category    TEXT,
         description TEXT,
         date        TEXT,
+        flagged     INTEGER DEFAULT 0,
         created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
 """)
+try:
+    conn.execute("ALTER TABLE expenses ADD COLUMN flagged INTEGER DEFAULT 0")
+except Exception:
+    pass  # column already exists
 conn.commit()
 
 
@@ -26,7 +31,7 @@ def save_expense(amount: float, category: str, description: str, date: str) -> d
 
 
 def get_expenses(start_date: str = None, end_date: str = None, category: str = None) -> list[dict]:
-    query = "SELECT id, amount, category, description, date FROM expenses WHERE 1=1"
+    query = "SELECT id, amount, category, description, date, flagged FROM expenses WHERE 1=1"
     params = []
 
     if start_date:
@@ -44,7 +49,7 @@ def get_expenses(start_date: str = None, end_date: str = None, category: str = N
     return [dict(row) for row in rows]
 
 
-def update_expense(id: int, amount: float = None, category: str = None, description: str = None, date: str = None) -> dict:
+def update_expense(id: int, amount: float = None, category: str = None, description: str = None, date: str = None, flagged: bool = None) -> dict:
     fields, params = [], []
     if amount is not None:
         fields.append("amount = ?")
@@ -58,6 +63,9 @@ def update_expense(id: int, amount: float = None, category: str = None, descript
     if date is not None:
         fields.append("date = ?")
         params.append(date)
+    if flagged is not None:
+        fields.append("flagged = ?")
+        params.append(1 if flagged else 0)
 
     if not fields:
         return {"status": "nothing to update"}
