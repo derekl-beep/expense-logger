@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 export default function Chat({ onExpenseChange, className = "" }) {
   const [messages, setMessages] = useState([
@@ -16,7 +18,6 @@ export default function Chat({ onExpenseChange, className = "" }) {
 
   const sendMessage = async (text, displayText = null) => {
     if (!text || loading) return;
-
     setMessages((prev) => [...prev, { role: "user", text: displayText ?? text }]);
     setLoading(true);
 
@@ -28,13 +29,11 @@ export default function Chat({ onExpenseChange, className = "" }) {
 
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
-
     setMessages((prev) => [...prev, { role: "agent", text: "" }]);
 
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
-
       for (const line of decoder.decode(value).split("\n")) {
         if (!line.startsWith("data: ")) continue;
         const payload = line.slice(6);
@@ -43,16 +42,12 @@ export default function Chat({ onExpenseChange, className = "" }) {
           const { text: chunk } = JSON.parse(payload);
           setMessages((prev) => {
             const updated = [...prev];
-            updated[updated.length - 1] = {
-              role: "agent",
-              text: updated[updated.length - 1].text + chunk,
-            };
+            updated[updated.length - 1] = { role: "agent", text: updated[updated.length - 1].text + chunk };
             return updated;
           });
         } catch {}
       }
     }
-
     setLoading(false);
     onExpenseChange();
   };
@@ -69,45 +64,65 @@ export default function Chat({ onExpenseChange, className = "" }) {
     const month = now.toLocaleString("default", { month: "long" });
     const year = now.getFullYear();
     const start = `${year}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
-    const prompt = `Summarize my expenses from ${start} to today. Show a breakdown by category with amounts, a total, and one observation about my spending.`;
-    sendMessage(prompt, `Summarize ${month} ${year}`);
+    sendMessage(
+      `Summarize my expenses from ${start} to today. Show a breakdown by category with amounts, a total, and one observation about my spending.`,
+      `Summarize ${month} ${year}`
+    );
   };
 
   const onKeyDown = (e) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      send();
-    }
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
   };
 
   return (
-    <div className={`chat-panel ${className}`}>
-      <div className="chat-header">
-        Expense Logger
-        <button className="summary-btn" onClick={sendMonthlySummary} disabled={loading}>
+    <div className={`${className} flex-col bg-white border-r border-zinc-200 w-full md:w-96 md:shrink-0`}>
+
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-100 shrink-0">
+        <span className="text-sm font-semibold text-zinc-800">Expense Logger</span>
+        <Button variant="outline" size="sm" className="h-7 text-xs" onClick={sendMonthlySummary} disabled={loading}>
           This Month
-        </button>
+        </Button>
       </div>
-      <div className="chat-messages">
+
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
         {messages.map((m, i) => (
-          <div key={i} className={`message ${m.role}`}>
-            {m.role === "agent" ? <Markdown remarkPlugins={[remarkGfm]}>{m.text}</Markdown> : m.text}
+          <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+            <div className={`max-w-[85%] px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed ${
+              m.role === "user"
+                ? "bg-zinc-900 text-white rounded-br-sm"
+                : "bg-zinc-100 text-zinc-800 rounded-bl-sm"
+            }`}>
+              {m.role === "agent"
+                ? <div className="prose prose-sm prose-zinc max-w-none [&_table]:text-xs [&_th]:py-1 [&_td]:py-1 [&_p]:my-0.5">
+                    <Markdown remarkPlugins={[remarkGfm]}>{m.text}</Markdown>
+                  </div>
+                : m.text}
+            </div>
           </div>
         ))}
-        {loading && <div className="message agent thinking">Thinking...</div>}
+        {loading && (
+          <div className="flex justify-start">
+            <div className="bg-zinc-100 text-zinc-400 text-sm px-3.5 py-2.5 rounded-2xl rounded-bl-sm italic">
+              Thinking…
+            </div>
+          </div>
+        )}
         <div ref={bottomRef} />
       </div>
-      <div className="chat-input-row">
-        <input
+
+      {/* Input */}
+      <div className="flex gap-2 px-4 py-3 border-t border-zinc-100 shrink-0">
+        <Input
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={onKeyDown}
           placeholder="e.g. $5 coffee today"
           disabled={loading}
+          className="flex-1 text-sm"
         />
-        <button onClick={send} disabled={loading}>
-          Send
-        </button>
+        <Button onClick={send} disabled={loading} size="sm">Send</Button>
       </div>
     </div>
   );

@@ -1,7 +1,45 @@
-import { useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
+const CATEGORY_COLORS = {
+  "Dining":        "bg-green-100 text-green-700",
+  "Groceries":     "bg-emerald-100 text-emerald-700",
+  "Transport":     "bg-blue-100 text-blue-700",
+  "Driving":       "bg-sky-100 text-sky-700",
+  "Gas":           "bg-cyan-100 text-cyan-700",
+  "Travel":        "bg-teal-100 text-teal-700",
+  "Clothing":      "bg-violet-100 text-violet-700",
+  "Beauty":        "bg-pink-100 text-pink-700",
+  "Entertainment": "bg-orange-100 text-orange-700",
+  "Subscription":  "bg-amber-100 text-amber-700",
+  "Health":        "bg-red-100 text-red-700",
+  "Household":     "bg-yellow-100 text-yellow-700",
+  "Furniture":     "bg-lime-100 text-lime-700",
+  "Rent":          "bg-zinc-100 text-zinc-600",
+  "Hydro":         "bg-slate-100 text-slate-600",
+  "Telecom":       "bg-gray-100 text-gray-600",
+  "Settling Down": "bg-indigo-100 text-indigo-700",
+};
+
+const formatDate = (d) =>
+  new Date(d + "T00:00:00").toLocaleDateString("default", { month: "short", day: "numeric" });
+
+const formatMonth = (ym) => {
+  const [year, month] = ym.split("-");
+  return new Date(year, month - 1).toLocaleString("default", { month: "long", year: "numeric" });
+};
 
 export default function ExpenseTable({ expenses, className = "", onExpenseChange }) {
   const [selectedMonth, setSelectedMonth] = useState("all");
+  const [editingId, setEditingId] = useState(null);
+  const [editValues, setEditValues] = useState({});
+  const [categories, setCategories] = useState([]);
+
+  useEffect(() => {
+    fetch("http://localhost:8000/categories").then((r) => r.json()).then(setCategories);
+  }, []);
 
   const months = useMemo(() => {
     const seen = new Set();
@@ -9,11 +47,23 @@ export default function ExpenseTable({ expenses, className = "", onExpenseChange
     return Array.from(seen).sort().reverse();
   }, [expenses]);
 
-  const filtered = selectedMonth === "all"
-    ? expenses
-    : expenses.filter((e) => e.date.startsWith(selectedMonth));
-
+  const filtered = selectedMonth === "all" ? expenses : expenses.filter((e) => e.date.startsWith(selectedMonth));
   const total = filtered.reduce((sum, e) => sum + e.amount, 0);
+
+  const startEdit = (e) => {
+    setEditingId(e.id);
+    setEditValues({ amount: e.amount, category: e.category, description: e.description, date: e.date });
+  };
+
+  const saveEdit = async () => {
+    await fetch(`http://localhost:8000/expenses/${editingId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(editValues),
+    });
+    setEditingId(null);
+    onExpenseChange();
+  };
 
   const deleteRow = async (id) => {
     await fetch(`http://localhost:8000/expenses/${id}`, { method: "DELETE" });
@@ -26,73 +76,94 @@ export default function ExpenseTable({ expenses, className = "", onExpenseChange
     onExpenseChange();
   };
 
-  const formatMonth = (ym) => {
-    const [year, month] = ym.split("-");
-    return new Date(year, month - 1).toLocaleString("default", { month: "long", year: "numeric" });
-  };
-
   return (
-    <div className={`table-panel ${className}`}>
-      <div className="table-header">
-        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          All Expenses
-          <select
-            className="month-select"
-            value={selectedMonth}
-            onChange={(e) => setSelectedMonth(e.target.value)}
-          >
-            <option value="all">All time</option>
-            {months.map((m) => (
-              <option key={m} value={m}>{formatMonth(m)}</option>
-            ))}
-          </select>
+    <div className={`${className} flex-col flex-1 overflow-hidden bg-white`}>
+
+      {/* Header */}
+      <div className="flex items-center justify-between px-5 py-3 border-b border-zinc-100 shrink-0">
+        <div className="flex items-center gap-3">
+          <span className="text-sm font-semibold text-zinc-800">All Expenses</span>
+          <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+            <SelectTrigger className="h-7 text-xs w-32 border-zinc-200">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All time</SelectItem>
+              {months.map((m) => <SelectItem key={m} value={m}>{formatMonth(m)}</SelectItem>)}
+            </SelectContent>
+          </Select>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          <span className="total">Total: ${total.toFixed(2)}</span>
-          <a
-            href="http://localhost:8000/expenses/export"
-            download="expenses.csv"
-            className="export-btn"
-          >
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-zinc-500">Total: <span className="font-semibold text-zinc-800">${total.toFixed(2)}</span></span>
+          <a href="http://localhost:8000/expenses/export" download="expenses.csv"
+            className="h-7 px-2.5 text-xs inline-flex items-center rounded-md border border-zinc-200 text-zinc-600 hover:bg-zinc-50 transition-colors">
             Export CSV
           </a>
-          <button className="clear-btn" onClick={clearAll}>
-            Clear All
-          </button>
+          <Button variant="destructive" size="sm" className="h-7 text-xs" onClick={clearAll}>Clear All</Button>
         </div>
       </div>
-      <div className="table-scroll">
-        <table>
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Description</th>
-              <th>Category</th>
-              <th>Amount</th>
-              <th></th>
+
+      {/* Table */}
+      <div className="flex-1 overflow-y-auto">
+        <table className="w-full text-sm border-collapse">
+          <thead className="sticky top-0 bg-white z-10">
+            <tr className="border-b border-zinc-100">
+              <th className="text-left px-5 py-2.5 text-xs font-medium text-zinc-400 uppercase tracking-wide w-20">Date</th>
+              <th className="text-left px-4 py-2.5 text-xs font-medium text-zinc-400 uppercase tracking-wide">Description</th>
+              <th className="text-left px-4 py-2.5 text-xs font-medium text-zinc-400 uppercase tracking-wide w-32">Category</th>
+              <th className="text-right px-4 py-2.5 text-xs font-medium text-zinc-400 uppercase tracking-wide w-24">Amount</th>
+              <th className="w-12"></th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
-              <tr>
-                <td colSpan={5} style={{ textAlign: "center", color: "#888" }}>
-                  No expenses yet
-                </td>
-              </tr>
-            ) : (
-              filtered.map((e) => (
-                <tr key={e.id}>
-                  <td>{new Date(e.date + "T00:00:00").toLocaleDateString("default", { month: "short", day: "numeric" })}</td>
-                  <td>{e.description}</td>
-                  <td>{e.category}</td>
-                  <td>${e.amount.toFixed(2)}</td>
-                  <td>
-                    <button className="delete-row-btn" onClick={() => deleteRow(e.id)}>
-                      ✕
-                    </button>
+              <tr><td colSpan={5} className="text-center py-16 text-zinc-400 text-sm">No expenses yet</td></tr>
+            ) : filtered.map((e) =>
+              editingId === e.id ? (
+                <tr key={e.id} className="bg-zinc-50 border-b border-zinc-100">
+                  <td className="px-4 py-2">
+                    <Input type="date" value={editValues.date} className="h-7 text-xs"
+                      onChange={(ev) => setEditValues({ ...editValues, date: ev.target.value })} />
+                  </td>
+                  <td className="px-4 py-2">
+                    <Input value={editValues.description} className="h-7 text-xs"
+                      onChange={(ev) => setEditValues({ ...editValues, description: ev.target.value })} />
+                  </td>
+                  <td className="px-4 py-2">
+                    <Select value={editValues.category} onValueChange={(v) => setEditValues({ ...editValues, category: v })}>
+                      <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+                      <SelectContent>{categories.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </td>
+                  <td className="px-4 py-2">
+                    <Input type="number" step="0.01" value={editValues.amount} className="h-7 text-xs text-right"
+                      onChange={(ev) => setEditValues({ ...editValues, amount: parseFloat(ev.target.value) })} />
+                  </td>
+                  <td className="px-3 py-2">
+                    <div className="flex gap-1">
+                      <button onClick={saveEdit} className="w-6 h-6 rounded text-xs bg-zinc-900 text-white hover:bg-zinc-700 transition-colors">✓</button>
+                      <button onClick={() => setEditingId(null)} className="w-6 h-6 rounded text-xs bg-zinc-100 text-zinc-600 hover:bg-zinc-200 transition-colors">✕</button>
+                    </div>
                   </td>
                 </tr>
-              ))
+              ) : (
+                <tr key={e.id} className="border-b border-zinc-50 hover:bg-zinc-50 cursor-pointer group transition-colors"
+                  onClick={() => startEdit(e)}>
+                  <td className="px-5 py-3 text-xs text-zinc-400 tabular-nums">{formatDate(e.date)}</td>
+                  <td className="px-4 py-3 text-sm text-zinc-700">{e.description}</td>
+                  <td className="px-4 py-3">
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium ${CATEGORY_COLORS[e.category] ?? "bg-zinc-100 text-zinc-600"}`}>
+                      {e.category}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-right text-sm font-medium text-zinc-800 tabular-nums">${e.amount.toFixed(2)}</td>
+                  <td className="px-3 py-3">
+                    <button
+                      className="opacity-0 group-hover:opacity-100 w-6 h-6 rounded text-xs text-zinc-300 hover:text-red-400 hover:bg-red-50 transition-all"
+                      onClick={(ev) => { ev.stopPropagation(); deleteRow(e.id); }}>✕</button>
+                  </td>
+                </tr>
+              )
             )}
           </tbody>
         </table>
