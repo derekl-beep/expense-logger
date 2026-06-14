@@ -41,6 +41,7 @@ export default function App() {
       <ExpenseTable
         className={activeTab !== "expenses" ? "hidden-mobile" : ""}
         expenses={expenses}
+        onExpenseChange={fetchExpenses}
       />
     </div>
   );

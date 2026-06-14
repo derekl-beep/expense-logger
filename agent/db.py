@@ -72,3 +72,9 @@ def delete_expense(id: int) -> dict:
     conn.execute("DELETE FROM expenses WHERE id = ?", (id,))
     conn.commit()
     return {"status": "deleted"}
+
+
+def clear_expenses() -> dict:
+    conn.execute("DELETE FROM expenses")
+    conn.commit()
+    return {"status": "cleared"}

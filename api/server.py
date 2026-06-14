@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from agent.db import get_expenses
+from agent.db import clear_expenses, delete_expense, get_expenses
 from agent.main import chat, stream_chat
 
 app = FastAPI()
@@ -43,6 +43,16 @@ def chat_stream_endpoint(req: ChatRequest):
 @app.get("/expenses")
 def expenses_endpoint():
     return get_expenses()
+
+
+@app.delete("/expenses/{id}")
+def delete_expense_endpoint(id: int):
+    return delete_expense(id)
+
+
+@app.delete("/expenses")
+def clear_expenses_endpoint():
+    return clear_expenses()
 
 
 @app.get("/expenses/export")
