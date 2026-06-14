@@ -4,7 +4,7 @@ import remarkGfm from "remark-gfm";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-export default function Chat({ onExpenseChange, className = "" }) {
+export default function Chat({ onExpenseChange, className = "", dark, onToggleDark }) {
   const [messages, setMessages] = useState([
     { role: "agent", text: "Hi! Log an expense or ask about your spending." },
   ]);
@@ -75,14 +75,23 @@ export default function Chat({ onExpenseChange, className = "" }) {
   };
 
   return (
-    <div className={`${className} flex-col bg-white border-r border-zinc-200 w-full md:w-96 md:shrink-0`}>
+    <div className={`${className} flex-col bg-background border-r border-border w-full md:w-96 md:shrink-0`}>
 
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-100 shrink-0">
-        <span className="text-sm font-semibold text-zinc-800">Expense Logger</span>
-        <Button variant="outline" size="sm" className="h-7 text-xs" onClick={sendMonthlySummary} disabled={loading}>
-          This Month
-        </Button>
+      <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
+        <span className="text-sm font-semibold text-foreground">Expense Logger</span>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onToggleDark}
+            className="text-base w-7 h-7 flex items-center justify-center rounded-md text-muted-foreground hover:bg-muted transition-colors"
+            title="Toggle dark mode"
+          >
+            {dark ? "☀️" : "🌙"}
+          </button>
+          <Button variant="outline" size="sm" className="h-7 text-xs" onClick={sendMonthlySummary} disabled={loading}>
+            This Month
+          </Button>
+        </div>
       </div>
 
       {/* Messages */}
@@ -91,11 +100,11 @@ export default function Chat({ onExpenseChange, className = "" }) {
           <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
             <div className={`max-w-[85%] px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed ${
               m.role === "user"
-                ? "bg-zinc-900 text-white rounded-br-sm"
-                : "bg-zinc-100 text-zinc-800 rounded-bl-sm"
+                ? "bg-primary text-primary-foreground rounded-br-sm"
+                : "bg-muted text-foreground rounded-bl-sm"
             }`}>
               {m.role === "agent"
-                ? <div className="prose prose-sm prose-zinc max-w-none [&_table]:text-xs [&_th]:py-1 [&_td]:py-1 [&_p]:my-0.5">
+                ? <div className="prose prose-sm dark:prose-invert max-w-none [&_table]:text-xs [&_th]:py-1 [&_td]:py-1 [&_p]:my-0.5">
                     <Markdown remarkPlugins={[remarkGfm]}>{m.text}</Markdown>
                   </div>
                 : m.text}
@@ -104,7 +113,7 @@ export default function Chat({ onExpenseChange, className = "" }) {
         ))}
         {loading && (
           <div className="flex justify-start">
-            <div className="bg-zinc-100 text-zinc-400 text-sm px-3.5 py-2.5 rounded-2xl rounded-bl-sm italic">
+            <div className="bg-muted text-muted-foreground text-sm px-3.5 py-2.5 rounded-2xl rounded-bl-sm italic">
               Thinking…
             </div>
           </div>
@@ -113,7 +122,7 @@ export default function Chat({ onExpenseChange, className = "" }) {
       </div>
 
       {/* Input */}
-      <div className="flex gap-2 px-4 py-3 border-t border-zinc-100 shrink-0">
+      <div className="flex gap-2 px-4 py-3 border-t border-border shrink-0">
         <Input
           value={input}
           onChange={(e) => setInput(e.target.value)}

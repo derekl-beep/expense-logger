@@ -5,6 +5,12 @@ import ExpenseTable from "./components/ExpenseTable";
 export default function App() {
   const [expenses, setExpenses] = useState([]);
   const [activeTab, setActiveTab] = useState("chat");
+  const [dark, setDark] = useState(() => localStorage.getItem("theme") === "dark");
+
+  useEffect(() => {
+    document.documentElement.classList.toggle("dark", dark);
+    localStorage.setItem("theme", dark ? "dark" : "light");
+  }, [dark]);
 
   const fetchExpenses = async () => {
     const res = await fetch("http://localhost:8000/expenses");
@@ -17,16 +23,16 @@ export default function App() {
   const tabClass = (tab) =>
     `flex-1 py-3 text-sm font-medium border-b-2 transition-colors ${
       activeTab === tab
-        ? "border-zinc-900 text-zinc-900"
-        : "border-transparent text-zinc-400"
+        ? "border-foreground text-foreground"
+        : "border-transparent text-muted-foreground"
     }`;
 
   return (
-    <div className="h-screen md:min-h-screen md:bg-zinc-100 md:flex md:items-center md:justify-center md:p-6">
-      <div className="h-screen md:h-[85vh] w-full md:max-w-5xl md:rounded-2xl md:shadow-xl overflow-hidden flex flex-col">
+    <div className="h-screen md:min-h-screen md:bg-zinc-100 md:dark:bg-zinc-950 md:flex md:items-center md:justify-center md:p-6">
+      <div className="h-screen md:h-[85vh] w-full md:max-w-5xl md:rounded-2xl md:shadow-xl overflow-hidden flex flex-col bg-background">
 
         {/* Mobile tab bar */}
-        <div className="flex md:hidden shrink-0 bg-white border-b border-zinc-200">
+        <div className="flex md:hidden shrink-0 bg-background border-b border-border">
           <button className={tabClass("chat")} onClick={() => setActiveTab("chat")}>Chat</button>
           <button className={tabClass("expenses")} onClick={() => setActiveTab("expenses")}>Expenses</button>
         </div>
@@ -36,6 +42,8 @@ export default function App() {
           <Chat
             className={activeTab === "chat" ? "flex" : "hidden md:flex"}
             onExpenseChange={() => { fetchExpenses(); setActiveTab("chat"); }}
+            dark={dark}
+            onToggleDark={() => setDark((d) => !d)}
           />
           <ExpenseTable
             className={activeTab === "expenses" ? "flex" : "hidden md:flex"}

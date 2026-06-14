@@ -4,23 +4,23 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const CATEGORY_COLORS = {
-  "Dining":        "bg-green-100 text-green-700",
-  "Groceries":     "bg-emerald-100 text-emerald-700",
-  "Transport":     "bg-blue-100 text-blue-700",
-  "Driving":       "bg-sky-100 text-sky-700",
-  "Gas":           "bg-cyan-100 text-cyan-700",
-  "Travel":        "bg-teal-100 text-teal-700",
-  "Clothing":      "bg-violet-100 text-violet-700",
-  "Beauty":        "bg-pink-100 text-pink-700",
-  "Entertainment": "bg-orange-100 text-orange-700",
-  "Subscription":  "bg-amber-100 text-amber-700",
-  "Health":        "bg-red-100 text-red-700",
-  "Household":     "bg-yellow-100 text-yellow-700",
-  "Furniture":     "bg-lime-100 text-lime-700",
-  "Rent":          "bg-zinc-100 text-zinc-600",
-  "Hydro":         "bg-slate-100 text-slate-600",
-  "Telecom":       "bg-gray-100 text-gray-600",
-  "Settling Down": "bg-indigo-100 text-indigo-700",
+  "Dining":        "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400",
+  "Groceries":     "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400",
+  "Transport":     "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400",
+  "Driving":       "bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-400",
+  "Gas":           "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-400",
+  "Travel":        "bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-400",
+  "Clothing":      "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-400",
+  "Beauty":        "bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-400",
+  "Entertainment": "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-400",
+  "Subscription":  "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400",
+  "Health":        "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400",
+  "Household":     "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-400",
+  "Furniture":     "bg-lime-100 text-lime-700 dark:bg-lime-900/40 dark:text-lime-400",
+  "Rent":          "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
+  "Hydro":         "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400",
+  "Telecom":       "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400",
+  "Settling Down": "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-400",
 };
 
 const formatDate = (d) =>
@@ -77,14 +77,14 @@ export default function ExpenseTable({ expenses, className = "", onExpenseChange
   };
 
   return (
-    <div className={`${className} flex-col flex-1 overflow-hidden bg-white`}>
+    <div className={`${className} flex-col flex-1 overflow-hidden bg-background`}>
 
       {/* Header */}
-      <div className="flex items-center justify-between px-5 py-3 border-b border-zinc-100 shrink-0">
+      <div className="flex items-center justify-between px-5 py-3 border-b border-border shrink-0">
         <div className="flex items-center gap-3">
-          <span className="text-sm font-semibold text-zinc-800">All Expenses</span>
+          <span className="text-sm font-semibold text-foreground">All Expenses</span>
           <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-            <SelectTrigger className="h-7 text-xs w-32 border-zinc-200">
+            <SelectTrigger className="h-7 text-xs w-32">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -94,9 +94,11 @@ export default function ExpenseTable({ expenses, className = "", onExpenseChange
           </Select>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-xs text-zinc-500">Total: <span className="font-semibold text-zinc-800">${total.toFixed(2)}</span></span>
+          <span className="text-xs text-muted-foreground">
+            Total: <span className="font-semibold text-foreground">${total.toFixed(2)}</span>
+          </span>
           <a href="http://localhost:8000/expenses/export" download="expenses.csv"
-            className="h-7 px-2.5 text-xs inline-flex items-center rounded-md border border-zinc-200 text-zinc-600 hover:bg-zinc-50 transition-colors">
+            className="h-7 px-2.5 text-xs inline-flex items-center rounded-md border border-border text-muted-foreground hover:bg-muted transition-colors">
             Export CSV
           </a>
           <Button variant="destructive" size="sm" className="h-7 text-xs" onClick={clearAll}>Clear All</Button>
@@ -106,21 +108,21 @@ export default function ExpenseTable({ expenses, className = "", onExpenseChange
       {/* Table */}
       <div className="flex-1 overflow-y-auto">
         <table className="w-full text-sm border-collapse">
-          <thead className="sticky top-0 bg-white z-10">
-            <tr className="border-b border-zinc-100">
-              <th className="text-left px-5 py-2.5 text-xs font-medium text-zinc-400 uppercase tracking-wide w-20">Date</th>
-              <th className="text-left px-4 py-2.5 text-xs font-medium text-zinc-400 uppercase tracking-wide">Description</th>
-              <th className="text-left px-4 py-2.5 text-xs font-medium text-zinc-400 uppercase tracking-wide w-32">Category</th>
-              <th className="text-right px-4 py-2.5 text-xs font-medium text-zinc-400 uppercase tracking-wide w-24">Amount</th>
+          <thead className="sticky top-0 bg-background z-10">
+            <tr className="border-b border-border">
+              <th className="text-left px-5 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wide w-20">Date</th>
+              <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wide">Description</th>
+              <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wide w-32">Category</th>
+              <th className="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wide w-24">Amount</th>
               <th className="w-12"></th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
-              <tr><td colSpan={5} className="text-center py-16 text-zinc-400 text-sm">No expenses yet</td></tr>
+              <tr><td colSpan={5} className="text-center py-16 text-muted-foreground text-sm">No expenses yet</td></tr>
             ) : filtered.map((e) =>
               editingId === e.id ? (
-                <tr key={e.id} className="bg-zinc-50 border-b border-zinc-100">
+                <tr key={e.id} className="bg-muted border-b border-border">
                   <td className="px-4 py-2">
                     <Input type="date" value={editValues.date} className="h-7 text-xs"
                       onChange={(ev) => setEditValues({ ...editValues, date: ev.target.value })} />
@@ -141,25 +143,25 @@ export default function ExpenseTable({ expenses, className = "", onExpenseChange
                   </td>
                   <td className="px-3 py-2">
                     <div className="flex gap-1">
-                      <button onClick={saveEdit} className="w-6 h-6 rounded text-xs bg-zinc-900 text-white hover:bg-zinc-700 transition-colors">✓</button>
-                      <button onClick={() => setEditingId(null)} className="w-6 h-6 rounded text-xs bg-zinc-100 text-zinc-600 hover:bg-zinc-200 transition-colors">✕</button>
+                      <button onClick={saveEdit} className="w-6 h-6 rounded text-xs bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">✓</button>
+                      <button onClick={() => setEditingId(null)} className="w-6 h-6 rounded text-xs bg-muted text-muted-foreground hover:bg-muted/80 transition-colors">✕</button>
                     </div>
                   </td>
                 </tr>
               ) : (
-                <tr key={e.id} className="border-b border-zinc-50 hover:bg-zinc-50 cursor-pointer group transition-colors"
+                <tr key={e.id} className="border-b border-border/50 hover:bg-muted/50 cursor-pointer group transition-colors"
                   onClick={() => startEdit(e)}>
-                  <td className="px-5 py-3 text-xs text-zinc-400 tabular-nums">{formatDate(e.date)}</td>
-                  <td className="px-4 py-3 text-sm text-zinc-700">{e.description}</td>
+                  <td className="px-5 py-3 text-xs text-muted-foreground tabular-nums">{formatDate(e.date)}</td>
+                  <td className="px-4 py-3 text-sm text-foreground">{e.description}</td>
                   <td className="px-4 py-3">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium ${CATEGORY_COLORS[e.category] ?? "bg-zinc-100 text-zinc-600"}`}>
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium ${CATEGORY_COLORS[e.category] ?? "bg-muted text-muted-foreground"}`}>
                       {e.category}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-right text-sm font-medium text-zinc-800 tabular-nums">${e.amount.toFixed(2)}</td>
+                  <td className="px-4 py-3 text-right text-sm font-medium text-foreground tabular-nums">${e.amount.toFixed(2)}</td>
                   <td className="px-3 py-3">
                     <button
-                      className="opacity-0 group-hover:opacity-100 w-6 h-6 rounded text-xs text-zinc-300 hover:text-red-400 hover:bg-red-50 transition-all"
+                      className="opacity-0 group-hover:opacity-100 w-6 h-6 rounded text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all"
                       onClick={(ev) => { ev.stopPropagation(); deleteRow(e.id); }}>✕</button>
                   </td>
                 </tr>
