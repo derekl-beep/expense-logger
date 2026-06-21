@@ -142,13 +142,6 @@ export default function Chat({ onExpenseChange, className = "", token, username,
           )}
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={onToggleDark}
-            className="text-base w-7 h-7 flex items-center justify-center rounded-md text-muted-foreground hover:bg-muted transition-colors"
-            title="Toggle dark mode"
-          >
-            {dark ? "☀️" : "🌙"}
-          </button>
           <Button variant="outline" size="sm" className="h-7 text-xs" onClick={sendMonthlySummary} disabled={loading}>
             This Month
           </Button>
@@ -158,7 +151,10 @@ export default function Chat({ onExpenseChange, className = "", token, username,
                 ⋯
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-36">
+            <DropdownMenuContent align="end" className="w-40">
+              <DropdownMenuItem onClick={onToggleDark} className="text-xs cursor-pointer">
+                {dark ? "Light mode" : "Dark mode"}
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={clearChat} disabled={loading} className="text-xs cursor-pointer">
                 Clear chat
               </DropdownMenuItem>
