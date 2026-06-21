@@ -50,8 +50,8 @@ export default function App() {
     }`;
 
   return (
-    <div className="h-screen md:min-h-screen md:bg-zinc-100 md:dark:bg-zinc-950 md:flex md:items-center md:justify-center md:p-6">
-      <div className="h-screen md:h-[85vh] w-full md:max-w-5xl md:rounded-2xl md:shadow-xl overflow-hidden flex flex-col bg-background">
+    <div className="h-dvh md:min-h-screen md:bg-zinc-100 md:dark:bg-zinc-950 md:flex md:items-center md:justify-center md:p-6">
+      <div className="h-dvh md:h-[85vh] w-full md:max-w-5xl md:rounded-2xl md:shadow-xl overflow-hidden flex flex-col bg-background">
 
         {/* Mobile tab bar */}
         <div className="flex md:hidden shrink-0 bg-background border-b border-border">

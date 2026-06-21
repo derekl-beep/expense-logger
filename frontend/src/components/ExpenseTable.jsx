@@ -102,12 +102,19 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
   return (
     <div className={`${className} flex-col flex-1 overflow-hidden bg-background`}>
 
-      {/* Header */}
-      <div className="flex items-center justify-between px-5 py-3 border-b border-border shrink-0">
-        <div className="flex items-center gap-3">
+      {/* Header — two rows on mobile, one row on desktop */}
+      <div className="flex flex-col gap-2 px-4 py-3 border-b border-border shrink-0 md:flex-row md:items-center md:justify-between md:px-5">
+        {/* Row 1: title + total */}
+        <div className="flex items-center justify-between md:justify-start md:gap-3">
           <span className="text-sm font-semibold text-foreground">All Expenses</span>
+          <span className="text-xs text-muted-foreground md:hidden">
+            Total: <span className="font-semibold text-foreground">${total.toFixed(2)}</span>
+          </span>
+        </div>
+        {/* Row 2: controls */}
+        <div className="flex items-center gap-2 flex-wrap">
           <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-            <SelectTrigger className="h-7 text-xs w-32">
+            <SelectTrigger className="h-8 text-xs w-32">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -115,11 +122,9 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
               {months.map((m) => <SelectItem key={m} value={m}>{formatMonth(m)}</SelectItem>)}
             </SelectContent>
           </Select>
-        </div>
-        <div className="flex items-center gap-2">
           <button
             onClick={() => setFlaggedOnly((f) => !f)}
-            className={`h-7 px-2.5 text-xs inline-flex items-center gap-1 rounded-md border transition-colors ${
+            className={`h-8 px-3 text-xs inline-flex items-center gap-1 rounded-md border transition-colors ${
               flaggedOnly
                 ? "border-amber-400 bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-700"
                 : "border-border text-muted-foreground hover:bg-muted"
@@ -127,11 +132,12 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
           >
             ⚑ Flagged
           </button>
-          <span className="text-xs text-muted-foreground">
+          {/* Total — desktop only */}
+          <span className="text-xs text-muted-foreground hidden md:inline">
             Total: <span className="font-semibold text-foreground">${total.toFixed(2)}</span>
           </span>
           <button onClick={exportCSV}
-            className="h-7 px-2.5 text-xs inline-flex items-center rounded-md border border-border text-muted-foreground hover:bg-muted transition-colors">
+            className="h-8 px-3 text-xs inline-flex items-center rounded-md border border-border text-muted-foreground hover:bg-muted transition-colors">
             Export CSV
           </button>
         </div>
@@ -142,12 +148,14 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
         <table className="w-full text-sm border-collapse">
           <thead className="sticky top-0 bg-background z-10">
             <tr className="border-b border-border">
-              <th className="text-left px-5 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wide w-20">Date</th>
-              <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wide">Description</th>
-              <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wide w-32">Category</th>
-              <th className="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wide w-24">Amount</th>
-              <th className="w-8"></th>
-              <th className="w-12"></th>
+              <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wide w-16">Date</th>
+              {/* Description col: on mobile takes full remaining width */}
+              <th className="text-left px-3 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wide">Description</th>
+              {/* Category col: hidden on mobile */}
+              <th className="text-left px-3 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wide w-28 hidden md:table-cell">Category</th>
+              <th className="text-right px-3 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wide w-20">Amount</th>
+              <th className="w-10"></th>
+              <th className="w-10"></th>
             </tr>
           </thead>
           <tbody>
@@ -156,56 +164,66 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
             ) : filtered.map((e) =>
               editingId === e.id ? (
                 <tr key={e.id} className="bg-muted border-b border-border">
-                  <td className="px-4 py-2">
-                    <Input type="date" value={editValues.date} className="h-7 text-xs"
+                  <td className="px-3 py-2">
+                    <Input type="date" value={editValues.date} className="h-8 text-xs"
                       onChange={(ev) => setEditValues({ ...editValues, date: ev.target.value })} />
                   </td>
-                  <td className="px-4 py-2">
-                    <Input value={editValues.description} className="h-7 text-xs"
+                  <td className="px-3 py-2">
+                    <Input value={editValues.description} className="h-8 text-xs"
                       onChange={(ev) => setEditValues({ ...editValues, description: ev.target.value })} />
                   </td>
-                  <td className="px-4 py-2">
+                  <td className="px-3 py-2 hidden md:table-cell">
                     <Select value={editValues.category} onValueChange={(v) => setEditValues({ ...editValues, category: v })}>
-                      <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+                      <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                       <SelectContent>{categories.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
                     </Select>
                   </td>
-                  <td className="px-4 py-2">
-                    <Input type="number" step="0.01" value={editValues.amount} className="h-7 text-xs text-right"
+                  <td className="px-3 py-2">
+                    <Input type="number" step="0.01" value={editValues.amount} className="h-8 text-xs text-right"
                       onChange={(ev) => setEditValues({ ...editValues, amount: parseFloat(ev.target.value) })} />
                   </td>
                   <td></td>
-                  <td className="px-3 py-2">
+                  <td className="px-2 py-2">
                     <div className="flex gap-1">
-                      <button onClick={saveEdit} className="w-6 h-6 rounded text-xs bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">✓</button>
-                      <button onClick={() => setEditingId(null)} className="w-6 h-6 rounded text-xs bg-muted text-muted-foreground hover:bg-muted/80 transition-colors">✕</button>
+                      <button onClick={saveEdit} className="w-9 h-9 rounded text-xs bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">✓</button>
+                      <button onClick={() => setEditingId(null)} className="w-9 h-9 rounded text-xs bg-muted text-muted-foreground hover:bg-muted/80 transition-colors border border-border">✕</button>
                     </div>
                   </td>
                 </tr>
               ) : (
-                <tr key={e.id} className="border-b border-border/50 hover:bg-muted/50 cursor-pointer group transition-colors"
+                <tr key={e.id} className="border-b border-border/50 hover:bg-muted/50 active:bg-muted cursor-pointer group transition-colors"
                   onClick={() => startEdit(e)}>
-                  <td className="px-5 py-3 text-xs text-muted-foreground tabular-nums">{formatDate(e.date)}</td>
-                  <td className="px-4 py-3 text-sm text-foreground">{e.description}</td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3 text-xs text-muted-foreground tabular-nums whitespace-nowrap">{formatDate(e.date)}</td>
+                  {/* On mobile: stack description + category badge */}
+                  <td className="px-3 py-3">
+                    <div className="text-sm text-foreground">{e.description}</div>
+                    <div className="mt-0.5 md:hidden">
+                      <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium ${CATEGORY_COLORS[e.category] ?? "bg-muted text-muted-foreground"}`}>
+                        {e.category}
+                      </span>
+                    </div>
+                  </td>
+                  {/* Category col: desktop only */}
+                  <td className="px-3 py-3 hidden md:table-cell">
                     <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium ${CATEGORY_COLORS[e.category] ?? "bg-muted text-muted-foreground"}`}>
                       {e.category}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-right text-sm font-medium text-foreground tabular-nums">${e.amount.toFixed(2)}</td>
-                  <td className="px-2 py-3">
+                  <td className="px-3 py-3 text-right text-sm font-medium text-foreground tabular-nums whitespace-nowrap">${e.amount.toFixed(2)}</td>
+                  {/* Larger tap targets on mobile */}
+                  <td className="py-3 px-1">
                     <button
                       onClick={(ev) => toggleFlag(e, ev)}
-                      className={`w-6 h-6 rounded text-xs transition-all ${
+                      className={`w-9 h-9 flex items-center justify-center rounded-md text-sm transition-all ${
                         e.flagged
                           ? "text-amber-500 dark:text-amber-400"
                           : "opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-amber-500"
                       }`}
                     >⚑</button>
                   </td>
-                  <td className="px-3 py-3">
+                  <td className="py-3 px-1">
                     <button
-                      className="opacity-0 group-hover:opacity-100 w-6 h-6 rounded text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all"
+                      className="opacity-0 group-hover:opacity-100 w-9 h-9 flex items-center justify-center rounded-md text-sm text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all"
                       onClick={(ev) => { ev.stopPropagation(); deleteRow(e.id); }}>✕</button>
                   </td>
                 </tr>
