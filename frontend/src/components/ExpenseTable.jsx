@@ -125,7 +125,7 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
 
       {/* Edit modal — shared between mobile and desktop */}
       <Dialog open={!!editingExpense} onOpenChange={(open) => { if (!open) setEditingExpense(null); }}>
-        <DialogContent className="sm:max-w-sm">
+        <DialogContent className="sm:max-w-sm" onOpenAutoFocus={(e) => e.preventDefault()}>
           <DialogHeader>
             <DialogTitle className="text-sm font-semibold">Edit Expense</DialogTitle>
           </DialogHeader>
@@ -136,7 +136,7 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
                 onChange={(e) => setEditValues({ ...editValues, description: e.target.value })} />
             </div>
             <div className="flex gap-2">
-              <div className="flex-1">
+              <div className="flex-1 min-w-0">
                 <label className="text-xs text-muted-foreground mb-1 block">Date</label>
                 <Input type="date" value={editValues.date ?? ""} className="h-9 text-sm"
                   onChange={(e) => setEditValues({ ...editValues, date: e.target.value })} />
