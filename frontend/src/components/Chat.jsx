@@ -201,7 +201,7 @@ export default function Chat({ onExpenseChange, className = "", token, username,
       </div>
 
       {/* Input */}
-      <div className="flex items-end gap-2 px-4 py-3 border-t border-border shrink-0">
+      <div className="flex items-end gap-2 px-4 pt-3 pb-[max(12px,env(safe-area-inset-bottom))] border-t border-border shrink-0">
         <textarea
           value={input}
           onChange={(e) => setInput(e.target.value)}

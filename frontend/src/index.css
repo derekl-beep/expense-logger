@@ -115,9 +115,7 @@ body { margin: 0; }
 
 #root {
   width: 100%;
-  min-height: 100svh;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
 }
