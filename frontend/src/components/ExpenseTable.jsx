@@ -3,6 +3,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 const CATEGORY_COLORS = {
   "Dining":        "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400",
@@ -183,7 +184,7 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
             Total: <span className="font-semibold text-foreground">${total.toFixed(2)}</span>
           </span>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2">
           <Select value={selectedMonth} onValueChange={setSelectedMonth}>
             <SelectTrigger className="h-8 text-xs w-32"><SelectValue /></SelectTrigger>
             <SelectContent>
@@ -204,10 +205,18 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
           <span className="text-xs text-muted-foreground hidden md:inline">
             Total: <span className="font-semibold text-foreground">${total.toFixed(2)}</span>
           </span>
-          <button onClick={exportCSV}
-            className="h-8 px-3 text-xs inline-flex items-center rounded-md border border-border text-muted-foreground hover:bg-muted transition-colors">
-            Export CSV
-          </button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="w-8 h-8 flex items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-muted transition-colors text-base">
+                ⋯
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-36">
+              <DropdownMenuItem onClick={exportCSV} className="text-xs cursor-pointer">
+                Export CSV
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
