@@ -52,6 +52,16 @@ _run("""
 _run("ALTER TABLE expenses ADD COLUMN IF NOT EXISTS flagged BOOLEAN DEFAULT FALSE")
 _run("ALTER TABLE expenses ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id)")
 
+_run("""
+    CREATE TABLE IF NOT EXISTS api_calls (
+        id         SERIAL PRIMARY KEY,
+        user_id    INTEGER REFERENCES users(id),
+        date       DATE NOT NULL,
+        count      INTEGER DEFAULT 1,
+        UNIQUE (user_id, date)
+    )
+""")
+
 
 def get_user_by_username(username: str) -> dict | None:
     cur = _run("SELECT * FROM users WHERE username = %s", (username,))
@@ -124,3 +134,22 @@ def update_expense(
 def delete_expense(id: int) -> dict:
     _run("DELETE FROM expenses WHERE id = %s", (id,))
     return {"status": "deleted"}
+
+
+def get_api_call_count(user_id: int, date: str) -> int:
+    cur = _run(
+        "SELECT count FROM api_calls WHERE user_id = %s AND date = %s",
+        (user_id, date),
+    )
+    row = cur.fetchone()
+    return row["count"] if row else 0
+
+
+def increment_api_call_count(user_id: int, date: str) -> None:
+    _run(
+        """
+        INSERT INTO api_calls (user_id, date, count) VALUES (%s, %s, 1)
+        ON CONFLICT (user_id, date) DO UPDATE SET count = api_calls.count + 1
+        """,
+        (user_id, date),
+    )

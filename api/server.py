@@ -1,6 +1,8 @@
 import csv
 import io
 import json
+import os
+from datetime import date
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,12 +12,27 @@ from pydantic import BaseModel
 from agent.categories import CATEGORIES
 from agent.db import (
     delete_expense,
+    get_api_call_count,
     get_expenses,
     get_user_by_username,
+    increment_api_call_count,
     update_expense,
 )
 from agent.main import chat, stream_chat
 from api.auth import create_token, get_current_user, verify_password
+
+DAILY_CALL_LIMIT = int(os.environ.get("DAILY_CALL_LIMIT", 50))
+
+
+def check_rate_limit(user_id: int = Depends(get_current_user)) -> int:
+    today = date.today().isoformat()
+    if get_api_call_count(user_id, today) >= DAILY_CALL_LIMIT:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Daily limit of {DAILY_CALL_LIMIT} messages reached. Try again tomorrow.",
+        )
+    increment_api_call_count(user_id, today)
+    return user_id
 
 app = FastAPI()
 
@@ -45,13 +62,13 @@ class ChatRequest(BaseModel):
 
 
 @app.post("/chat")
-def chat_endpoint(req: ChatRequest, user_id: int = Depends(get_current_user)):
+def chat_endpoint(req: ChatRequest, user_id: int = Depends(check_rate_limit)):
     response = chat(req.message, user_id)
     return {"response": response}
 
 
 @app.post("/chat/stream")
-def chat_stream_endpoint(req: ChatRequest, user_id: int = Depends(get_current_user)):
+def chat_stream_endpoint(req: ChatRequest, user_id: int = Depends(check_rate_limit)):
     def generate():
         try:
             for chunk in stream_chat(req.message, user_id):

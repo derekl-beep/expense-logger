@@ -31,6 +31,12 @@ export default function Chat({ onExpenseChange, className = "", token, username,
     });
 
     if (res.status === 401) { onLogout(); return; }
+    if (res.status === 429) {
+      const { detail } = await res.json();
+      setMessages((prev) => [...prev, { role: "agent", text: detail, error: true }]);
+      setLoading(false);
+      return;
+    }
 
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
