@@ -29,7 +29,7 @@ export default function App() {
   };
 
   const fetchExpenses = async () => {
-    const res = await fetch("http://localhost:8000/expenses", {
+    const res = await fetch("/expenses", {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (res.status === 401) { handleLogout(); return; }

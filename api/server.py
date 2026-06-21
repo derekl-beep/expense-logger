@@ -3,10 +3,12 @@ import io
 import json
 import os
 from datetime import date
+from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from agent.categories import CATEGORIES
@@ -36,9 +38,13 @@ def check_rate_limit(user_id: int = Depends(get_current_user)) -> int:
 
 app = FastAPI()
 
+_allowed_origins = ["http://localhost:5173"]
+if prod_origin := os.environ.get("ALLOWED_ORIGIN"):
+    _allowed_origins.append(prod_origin)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],  # updated to prod domain in Phase 7
+    allow_origins=_allowed_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -127,3 +133,13 @@ def expenses_export(user_id: int = Depends(get_current_user)):
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=expenses.csv"},
     )
+
+
+# Serve React build — must be mounted after all API routes
+_static = Path(__file__).parent.parent / "frontend" / "dist"
+if _static.exists():
+    app.mount("/assets", StaticFiles(directory=_static / "assets"), name="assets")
+
+    @app.get("/{full_path:path}")
+    def spa_fallback(full_path: str):
+        return FileResponse(_static / "index.html")

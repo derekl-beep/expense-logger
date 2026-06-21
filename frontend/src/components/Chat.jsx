@@ -21,7 +21,7 @@ export default function Chat({ onExpenseChange, className = "", token, username,
     setMessages((prev) => [...prev, { role: "user", text: displayText ?? text }]);
     setLoading(true);
 
-    const res = await fetch("http://localhost:8000/chat/stream", {
+    const res = await fetch("/chat/stream", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

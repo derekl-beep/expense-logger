@@ -44,7 +44,7 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
   const [categories, setCategories] = useState([]);
 
   useEffect(() => {
-    fetch("http://localhost:8000/categories").then((r) => r.json()).then(setCategories);
+    fetch("/categories").then((r) => r.json()).then(setCategories);
   }, []);
 
   const months = useMemo(() => {
@@ -60,7 +60,7 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
 
   const toggleFlag = async (e, ev) => {
     ev.stopPropagation();
-    await authFetch(`http://localhost:8000/expenses/${e.id}`, {
+    await authFetch(`/expenses/${e.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ flagged: !e.flagged }),
@@ -74,7 +74,7 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
   };
 
   const saveEdit = async () => {
-    await authFetch(`http://localhost:8000/expenses/${editingId}`, {
+    await authFetch(`/expenses/${editingId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(editValues),
@@ -84,12 +84,12 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
   };
 
   const deleteRow = async (id) => {
-    await authFetch(`http://localhost:8000/expenses/${id}`, { method: "DELETE" });
+    await authFetch(`/expenses/${id}`, { method: "DELETE" });
     onExpenseChange();
   };
 
   const exportCSV = async () => {
-    const res = await authFetch("http://localhost:8000/expenses/export");
+    const res = await authFetch("/expenses/export");
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
