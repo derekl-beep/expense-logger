@@ -1,31 +1,36 @@
 # Expense Logger
 
-A personal expense tracker powered by an AI agent. Instead of filling out forms, you describe expenses in plain English — the agent parses them, infers missing fields, and saves structured rows to a database. You can also query your spending in natural language.
+A personal expense tracker powered by an AI agent. Describe expenses in plain English — the agent parses them, infers missing fields, and saves structured records to a database. Query your spending the same way.
 
-> Built as a side project to explore how agentic AI changes the way we develop applications.
+> Built as a side project to explore how agentic AI changes application development.
 
 ---
 
-## Demo
+## Features
 
-| Chat | Expenses |
+- **Natural language input** — _"$12 lunch at the food court"_ is all you need to type
+- **Agentic decisions** — infers category, resolves vague dates like "yesterday", asks when unclear
+- **Full CRUD via chat** — update or delete past expenses through conversation
+- **Live expense table** — updates after every message, filterable by month and flagged status
+- **Monthly summary** — one-click breakdown by category with observations
+- **CSV export** — download all expenses anytime
+- **Dark mode** — persisted across sessions
+- **Multi-user** — JWT auth, per-session conversation isolation, shared expense pool
+
+---
+
+## Stack
+
+| Layer | Choice |
 |---|---|
-| _"$80 wine at LCBO"_ → saved under **Shopping** | Live table updates after every message |
-| _"how much did I spend this week?"_ → breakdown by category | Export to CSV anytime |
-| _"change my lunch to $15"_ → agent finds the row and updates it | Monthly summary with one click |
-
----
-
-## What makes this agentic
-
-This isn't a form with parsing logic — it's an agent that:
-
-- **Interprets natural language** — extracts amount, category, date, and description from free text
-- **Makes decisions** — infers category from context, resolves vague dates like "yesterday"
-- **Calls tools** — `save_expense`, `get_expenses`, `update_expense`, `delete_expense`
-- **Chains tool calls** — to update an expense, Claude first queries to find its ID, then updates it
-- **Handles ambiguity** — asks a follow-up question when input is unclear
-- **Maintains conversation history** — remembers context across turns in a session
+| LLM | Claude API (`claude-haiku-4-5`) |
+| Backend | Python 3.12 + FastAPI |
+| Frontend | React 19 + Vite + Tailwind CSS + shadcn/ui |
+| Database | PostgreSQL (Neon) |
+| Auth | JWT + bcrypt |
+| Streaming | Server-sent events (SSE) |
+| Deploy | Railway (Docker) |
+| Package manager | `uv` |
 
 ---
 
@@ -33,48 +38,29 @@ This isn't a form with parsing logic — it's an agent that:
 
 ```
 React (chat UI)
-     ↓  HTTP + SSE (streaming)
+     │
+     │  POST /chat/stream  (SSE)
+     │  GET  /expenses
+     ▼
 FastAPI
-     ↓
-Python agent — Claude API + tool definitions
-     ↓
-SQLite
+     │
+     ▼
+Agent loop  ──────────────────────────────────────┐
+│  1. Send user message + history to Claude        │
+│  2. Claude responds with tool_call               │
+│  3. Execute tool (save / get / update / delete)  │◄── PostgreSQL
+│  4. Send tool result back to Claude              │
+│  5. Claude streams natural language response     │
+└──────────────────────────────────────────────────┘
 ```
 
 ### The 3 layers of an agentic app
 
 | Layer | What it is | What you write |
 |---|---|---|
-| Agent | LLM + system prompt | Prompt that tells Claude how to think |
-| Tool definitions | JSON schemas | Contracts describing what functions exist |
-| Tool implementations | Python functions | Plain executors — write to DB, read from DB |
-
-### The agent loop
-
-One user message ≠ one LLM call. Each interaction is a cycle:
-
-```
-1. Send user message to LLM
-2. LLM responds with a tool_call
-3. Your code executes the tool
-4. Send the tool result back to LLM
-5. LLM generates a natural language response  ← streamed word by word
-```
-
-Steps 2–4 repeat when multiple tools are needed (e.g. query then update).
-
----
-
-## Tech Stack
-
-| Layer | Choice |
-|---|---|
-| LLM | Claude API (`claude-sonnet-4-6`) |
-| Backend | Python + FastAPI |
-| Frontend | React + Vite |
-| Database | SQLite (dev) |
-| Package manager | `uv` |
-| Streaming | Server-sent events (SSE) |
+| Agent | LLM + system prompt | Prompt that defines how Claude thinks |
+| Tool definitions | JSON schemas | Contracts describing available functions |
+| Tool implementations | Python functions | Plain executors — read/write the DB |
 
 ---
 
@@ -85,16 +71,22 @@ expense-logger/
 ├── agent/
 │   ├── main.py         # agent loop + streaming
 │   ├── tools.py        # tool definitions + handler map
-│   ├── db.py           # SQLite queries
-│   └── categories.py   # fixed category list
+│   ├── db.py           # PostgreSQL queries (psycopg2)
+│   └── categories.py   # fixed category list (17 categories)
 ├── api/
-│   └── server.py       # FastAPI — /chat/stream, /expenses, /expenses/export
-└── frontend/
-    └── src/
-        ├── App.jsx
-        └── components/
-            ├── Chat.jsx
-            └── ExpenseTable.jsx
+│   ├── server.py       # FastAPI routes + static file serving
+│   └── auth.py         # JWT creation/verification, bcrypt helpers
+├── scripts/
+│   └── seed_users.py   # one-time script to create family accounts
+├── frontend/
+│   └── src/
+│       ├── App.jsx
+│       └── components/
+│           ├── Chat.jsx
+│           ├── ExpenseTable.jsx
+│           └── Login.jsx
+├── Dockerfile
+└── .env.example
 ```
 
 ---
@@ -104,24 +96,37 @@ expense-logger/
 ### Prerequisites
 
 - Python 3.12+
-- Node.js 18+
+- Node.js 20+
 - [`uv`](https://github.com/astral-sh/uv) — `curl -LsSf https://astral.sh/uv/install.sh | sh`
+- A PostgreSQL database ([Neon](https://neon.tech) free tier works)
 - An [Anthropic API key](https://console.anthropic.com)
 
-### Backend
+### 1. Clone and configure
 
 ```bash
-# Install dependencies
-uv install
+git clone https://github.com/derekl-beep/expense-logger.git
+cd expense-logger
 
-# Set your API key
-echo "ANTHROPIC_API_KEY=sk-ant-..." > .env
+cp .env.example .env
+# Fill in ANTHROPIC_API_KEY, JWT_SECRET, DATABASE_URL
+```
 
-# Start the API server
+### 2. Backend
+
+```bash
+uv sync
 uv run uvicorn api.server:app --reload
 ```
 
-### Frontend
+### 3. Seed user accounts
+
+```bash
+uv run python scripts/seed_users.py
+```
+
+Edit `USERNAMES` in the script to set your family members' usernames before running.
+
+### 4. Frontend
 
 ```bash
 cd frontend
@@ -133,6 +138,32 @@ Open `http://localhost:5173`.
 
 ---
 
+## Environment Variables
+
+| Variable | Required | Description |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | Yes | Get one at [console.anthropic.com](https://console.anthropic.com) |
+| `JWT_SECRET` | Yes | Any long random string — `openssl rand -hex 32` |
+| `DATABASE_URL` | Yes | PostgreSQL connection string |
+| `DAILY_CALL_LIMIT` | No | Max Claude API calls per user per day (default: `50`) |
+| `ALLOWED_ORIGIN` | No | Production frontend URL for CORS (e.g. `https://your-app.railway.app`) |
+
+---
+
+## Deployment
+
+The app is packaged as a single Docker image — FastAPI serves both the API and the React build.
+
+### Railway (recommended)
+
+1. Push to GitHub
+2. New Railway project → Deploy from GitHub repo
+3. Set environment variables (see table above)
+4. Generate a public domain → set it as `ALLOWED_ORIGIN` → redeploy
+5. Seed production accounts: `DATABASE_URL=<prod-url> uv run python scripts/seed_users.py`
+
+---
+
 ## Key Patterns Demonstrated
 
 | Pattern | Where |
@@ -141,39 +172,23 @@ Open `http://localhost:5173`.
 | Agent loop with tool results | `agent/main.py` — `chat()` and `stream_chat()` |
 | Streaming responses (SSE) | `api/server.py` → `Chat.jsx` |
 | Multi-tool chaining | Update/delete — Claude queries first, then acts |
-| Conversation history | `messages` list persisted across turns |
+| Per-user conversation isolation | `_sessions` dict keyed by `user_id` in `agent/main.py` |
 | Constrained output | Category field uses JSON schema `enum` |
-| Prompt + schema separation | Category hints in system prompt, enforcement in tool schema |
-
----
-
-## Deployment Roadmap
-
-Phases to make the app production-ready for shared family use.
-
-| Phase | What | Why |
-|-------|------|-----|
-| 1 — Conversation isolation | Frontend owns history, sends `session_id` with each request | Global `messages` list is shared across all users today |
-| 2 — Auth + user model | JWT login, `users` table, `user_id` on expenses, seed script for family accounts | Access control + track who logged what |
-| 3 — Data safety | Remove `DELETE /expenses` (clear-all) endpoint | One call wipes all family data |
-| 4 — Postgres | Swap `sqlite3` → `psycopg2`, read `DATABASE_URL` from env | SQLite file doesn't survive Railway restarts |
-| 5 — Reliability | `try/except` on Claude stream → SSE error event; `GET /health` endpoint | Silent failures; Railway needs health checks |
-| 6 — API cost guard | `api_calls` table, daily limit per user via `DAILY_CALL_LIMIT` env var | Prevent runaway Claude API spend |
-| 7 — Deploy | Dockerfile, CORS → prod domain, env vars in Railway, smoke test | Ship it |
-
-Future extensions: per-user expense views (filter toggle, near-zero work once `user_id` exists), Google SSO (additive — new login path, same JWT layer).
+| JWT auth as FastAPI dependency | `api/auth.py` → `Depends(get_current_user)` |
+| API cost guard | `check_rate_limit` dependency on all chat endpoints |
 
 ---
 
 ## How to Phase an LLM Project
 
-Phasing an LLM project is different from a regular app. The model handles what would take hundreds of lines of traditional parsing logic, so phases are about **adding control and reliability**, not features.
+Phasing an LLM project differs from a regular app. The model handles what would take hundreds of lines of parsing logic — so phases are about **adding control and reliability**, not features.
 
 | Phase | Goal |
 |---|---|
 | 1 — Prove it works | Happy path end-to-end in a single file |
-| 2 — Handle the real world | Ambiguity, multi-tool, conversation history |
+| 2 — Handle the real world | Ambiguity, multi-tool chaining, conversation history |
 | 3 — Make it usable | UI, streaming, responsive layout |
 | 4 — Polish | Fixed categories, summaries, CSV export |
+| 5 — Production | Auth, Postgres, rate limiting, deployment |
 
-MVP = minimum *prompt + tools* to prove the model handles the core task. You can ship Phase 1 in ~50 lines of Python.
+MVP = minimum *prompt + tools* to prove the model handles the core task. Phase 1 fits in ~50 lines of Python.
