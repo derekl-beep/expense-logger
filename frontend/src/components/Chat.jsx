@@ -179,7 +179,7 @@ export default function Chat({ onExpenseChange, className = "", token, username,
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={onKeyDown}
-          placeholder="e.g. $5 coffee today  (Shift+Enter for new line)"
+          placeholder="e.g. $5 coffee today"
           disabled={loading}
           rows={1}
           className="flex-1 text-sm resize-none overflow-hidden rounded-md border border-input bg-background px-3 py-2 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50 leading-5"
