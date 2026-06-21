@@ -2,6 +2,13 @@ import { useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 const STORAGE_KEY = "chat_messages";
 const TTL_MS = 24 * 60 * 60 * 1000;
@@ -117,6 +124,12 @@ export default function Chat({ onExpenseChange, className = "", token, username,
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
   };
 
+  const clearChat = () => {
+    const fresh = [{ ...INITIAL_MESSAGE, ts: Date.now() }];
+    setMessages(fresh);
+    localStorage.removeItem(STORAGE_KEY);
+  };
+
   return (
     <div className={`${className} flex-col bg-background border-r border-border w-full md:w-96 md:shrink-0`}>
 
@@ -139,9 +152,22 @@ export default function Chat({ onExpenseChange, className = "", token, username,
           <Button variant="outline" size="sm" className="h-7 text-xs" onClick={sendMonthlySummary} disabled={loading}>
             This Month
           </Button>
-          <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground" onClick={onLogout}>
-            Sign out
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="w-7 h-7 flex items-center justify-center rounded-md text-muted-foreground hover:bg-muted transition-colors text-base">
+                ⋯
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-36">
+              <DropdownMenuItem onClick={clearChat} disabled={loading} className="text-xs cursor-pointer">
+                Clear chat
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={onLogout} className="text-xs cursor-pointer text-destructive focus:text-destructive">
+                Sign out
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
