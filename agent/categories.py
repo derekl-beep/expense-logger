@@ -4,6 +4,7 @@ CATEGORIES = [
     "Settling Down",
     "Travel",
     "Dining",
+    "Drinks",
     "Groceries",
     "Furniture",
     "Entertainment",
@@ -23,7 +24,8 @@ CATEGORY_HINTS = """Categories and what they cover:
 - Rent: monthly rent payments
 - Settling Down: one-time moving or setup costs (deposits, movers, first-time purchases)
 - Travel: flights, hotels, trips
-- Dining: restaurants, cafes, takeout
+- Dining: restaurants, cafes, takeout, food courts
+- Drinks: coffee, bubble tea, beer, wine, cocktails, juice bars
 - Groceries: supermarket and food shopping
 - Furniture: home furnishings and appliances
 - Entertainment: movies, events, games, hobbies

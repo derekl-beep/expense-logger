@@ -2,12 +2,31 @@ import { useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+
+const STORAGE_KEY = "chat_messages";
+const TTL_MS = 24 * 60 * 60 * 1000;
+
+const INITIAL_MESSAGE = { role: "agent", text: "Hi! Log an expense or ask about your spending.", ts: Date.now() };
+
+function loadMessages() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+    const cutoff = Date.now() - TTL_MS;
+    const recent = saved.filter((m) => m.ts > cutoff);
+    return recent.length > 0 ? recent : [INITIAL_MESSAGE];
+  } catch {
+    return [INITIAL_MESSAGE];
+  }
+}
+
+function saveMessages(msgs) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(msgs));
+  } catch {}
+}
 
 export default function Chat({ onExpenseChange, className = "", token, username, onLogout, dark, onToggleDark }) {
-  const [messages, setMessages] = useState([
-    { role: "agent", text: "Hi! Log an expense or ask about your spending." },
-  ]);
+  const [messages, setMessages] = useState(loadMessages);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const bottomRef = useRef(null);
@@ -16,9 +35,13 @@ export default function Chat({ onExpenseChange, className = "", token, username,
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  useEffect(() => {
+    saveMessages(messages);
+  }, [messages]);
+
   const sendMessage = async (text, displayText = null) => {
     if (!text || loading) return;
-    setMessages((prev) => [...prev, { role: "user", text: displayText ?? text }]);
+    setMessages((prev) => [...prev, { role: "user", text: displayText ?? text, ts: Date.now() }]);
     setLoading(true);
 
     const res = await fetch("/chat/stream", {
@@ -33,14 +56,14 @@ export default function Chat({ onExpenseChange, className = "", token, username,
     if (res.status === 401) { onLogout(); return; }
     if (res.status === 429) {
       const { detail } = await res.json();
-      setMessages((prev) => [...prev, { role: "agent", text: detail, error: true }]);
+      setMessages((prev) => [...prev, { role: "agent", text: detail, error: true, ts: Date.now() }]);
       setLoading(false);
       return;
     }
 
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
-    setMessages((prev) => [...prev, { role: "agent", text: "" }]);
+    setMessages((prev) => [...prev, { role: "agent", text: "", ts: Date.now() }]);
 
     while (true) {
       const { done, value } = await reader.read();
@@ -54,7 +77,7 @@ export default function Chat({ onExpenseChange, className = "", token, username,
           if (data.error) {
             setMessages((prev) => {
               const updated = [...prev];
-              updated[updated.length - 1] = { role: "agent", text: data.error, error: true };
+              updated[updated.length - 1] = { role: "agent", text: data.error, error: true, ts: Date.now() };
               return updated;
             });
           } else {
@@ -151,16 +174,22 @@ export default function Chat({ onExpenseChange, className = "", token, username,
       </div>
 
       {/* Input */}
-      <div className="flex gap-2 px-4 py-3 border-t border-border shrink-0">
-        <Input
+      <div className="flex items-end gap-2 px-4 py-3 border-t border-border shrink-0">
+        <textarea
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={onKeyDown}
-          placeholder="e.g. $5 coffee today"
+          placeholder="e.g. $5 coffee today  (Shift+Enter for new line)"
           disabled={loading}
-          className="flex-1 text-sm"
+          rows={1}
+          className="flex-1 text-sm resize-none overflow-hidden rounded-md border border-input bg-background px-3 py-2 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50 leading-5"
+          style={{ minHeight: "36px", maxHeight: "120px" }}
+          onInput={(e) => {
+            e.target.style.height = "auto";
+            e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px";
+          }}
         />
-        <Button onClick={send} disabled={loading} size="sm">Send</Button>
+        <Button onClick={send} disabled={loading} size="sm" className="shrink-0">Send</Button>
       </div>
     </div>
   );
