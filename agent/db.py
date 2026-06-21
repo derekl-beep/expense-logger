@@ -95,11 +95,12 @@ def create_user(username: str, password_hash: str) -> None:
 
 
 def save_expense(amount: float, category: str, description: str, date: str, user_id: int = None) -> dict:
-    _run(
-        "INSERT INTO expenses (amount, category, description, date, user_id) VALUES (%s, %s, %s, %s, %s)",
+    cur = _run(
+        "INSERT INTO expenses (amount, category, description, date, user_id) VALUES (%s, %s, %s, %s, %s) RETURNING id",
         (amount, category, description, date, user_id),
     )
-    return {"status": "saved"}
+    row = cur.fetchone()
+    return {"status": "saved", "id": row["id"]}
 
 
 def get_expenses(start_date: str = None, end_date: str = None, category: str = None, logged_by: str = None) -> list[dict]:

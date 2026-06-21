@@ -26,7 +26,8 @@ Use logged_by to filter by who logged the expense (e.g. "derek" or "kelly").
 Present results clearly with a total where useful.
 
 ## Editing and flagging
-To update or flag an expense, first call get_expenses to find the right record, then call update_expense.
+save_expense returns the new expense's id. If you need to immediately update the just-saved expense (e.g. flag it), use that id directly with update_expense — never call get_expenses to find it.
+For all other edits and flags, call get_expenses to find the right record first, then call update_expense.
 If the user refers to "the last one", "that expense", or similar, call get_expenses (no filters, most recent first) to identify it by context.
 Flagging marks an expense for follow-up (flagged=true). Unflagging clears it (flagged=false).
 
