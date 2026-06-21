@@ -59,6 +59,10 @@ def get_user_by_username(username: str) -> dict | None:
     return dict(row) if row else None
 
 
+def create_user(username: str, password_hash: str) -> None:
+    _run("INSERT INTO users (username, password_hash) VALUES (%s, %s)", (username, password_hash))
+
+
 def save_expense(amount: float, category: str, description: str, date: str, user_id: int = None) -> dict:
     _run(
         "INSERT INTO expenses (amount, category, description, date, user_id) VALUES (%s, %s, %s, %s, %s)",

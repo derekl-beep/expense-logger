@@ -7,7 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from agent.db import conn
+from agent.db import create_user
 
 USERNAMES = ["derek", "kelly"]
 
@@ -19,13 +19,9 @@ for username in USERNAMES:
         print(f"  Skipping {username} (empty password)\n")
         continue
     try:
-        conn.execute(
-            "INSERT INTO users (username, password_hash) VALUES (?, ?)",
-            (username, bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()),
-        )
+        create_user(username, bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode())
         print(f"  Created: {username}\n")
     except Exception as e:
         print(f"  Skipped {username}: {e}\n")
 
-conn.commit()
 print("Done. Users can now log in at /auth/login.")
