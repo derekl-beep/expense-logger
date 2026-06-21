@@ -205,7 +205,7 @@ export default function Chat({ onExpenseChange, className = "", token, username,
           placeholder="e.g. $5 coffee today"
           disabled={loading}
           rows={1}
-          className="flex-1 text-sm resize-none overflow-hidden rounded-2xl border border-input bg-background px-4 py-2 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50 leading-5"
+          className="flex-1 text-base md:text-sm resize-none overflow-hidden rounded-2xl border border-input bg-background px-4 py-2 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50 leading-5"
           style={{ minHeight: "36px", maxHeight: "120px" }}
           onInput={(e) => {
             e.target.style.height = "auto";
