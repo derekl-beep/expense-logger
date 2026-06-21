@@ -53,6 +53,7 @@ app.add_middleware(
 class LoginRequest(BaseModel):
     username: str
     password: str
+    remember: bool = False
 
 
 @app.post("/auth/login")
@@ -60,7 +61,7 @@ def login(req: LoginRequest):
     user = get_user_by_username(req.username)
     if not user or not verify_password(req.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    return {"token": create_token(user["id"]), "username": user["username"]}
+    return {"token": create_token(user["id"], req.remember), "username": user["username"]}
 
 
 class ChatRequest(BaseModel):

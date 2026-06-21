@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 export default function Login({ onLogin }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [remember, setRemember] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -16,7 +17,7 @@ export default function Login({ onLogin }) {
       const res = await fetch("/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ username, password, remember }),
       });
       if (!res.ok) {
         setError("Invalid username or password");
@@ -55,6 +56,19 @@ export default function Login({ onLogin }) {
             onChange={(e) => setPassword(e.target.value)}
             disabled={loading}
           />
+          <div className="flex items-center gap-2">
+            <input
+              id="remember"
+              type="checkbox"
+              checked={remember}
+              onChange={(e) => setRemember(e.target.checked)}
+              disabled={loading}
+              className="h-4 w-4 rounded border-border accent-primary cursor-pointer"
+            />
+            <label htmlFor="remember" className="text-sm text-muted-foreground cursor-pointer select-none">
+              Remember me for 30 days
+            </label>
+          </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
           <Button type="submit" className="w-full" disabled={loading || !username || !password}>
             {loading ? "Signing in…" : "Sign in"}

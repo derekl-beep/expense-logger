@@ -7,7 +7,8 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 
 ALGORITHM = "HS256"
-TOKEN_EXPIRE_DAYS = 30
+TOKEN_EXPIRE_DAYS_DEFAULT = 1
+TOKEN_EXPIRE_DAYS_REMEMBER = 30
 
 bearer = HTTPBearer()
 
@@ -20,10 +21,11 @@ def verify_password(plain: str, hashed: str) -> bool:
     return bcrypt.checkpw(plain.encode(), hashed.encode())
 
 
-def create_token(user_id: int) -> str:
+def create_token(user_id: int, remember: bool = False) -> str:
+    days = TOKEN_EXPIRE_DAYS_REMEMBER if remember else TOKEN_EXPIRE_DAYS_DEFAULT
     payload = {
         "sub": str(user_id),
-        "exp": datetime.now(timezone.utc) + timedelta(days=TOKEN_EXPIRE_DAYS),
+        "exp": datetime.now(timezone.utc) + timedelta(days=days),
     }
     return jwt.encode(payload, os.environ["JWT_SECRET"], algorithm=ALGORITHM)
 
