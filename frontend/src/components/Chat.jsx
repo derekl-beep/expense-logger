@@ -44,12 +44,20 @@ export default function Chat({ onExpenseChange, className = "", token, username,
         const payload = line.slice(6);
         if (payload === "[DONE]") break;
         try {
-          const { text: chunk } = JSON.parse(payload);
-          setMessages((prev) => {
-            const updated = [...prev];
-            updated[updated.length - 1] = { role: "agent", text: updated[updated.length - 1].text + chunk };
-            return updated;
-          });
+          const data = JSON.parse(payload);
+          if (data.error) {
+            setMessages((prev) => {
+              const updated = [...prev];
+              updated[updated.length - 1] = { role: "agent", text: data.error, error: true };
+              return updated;
+            });
+          } else {
+            setMessages((prev) => {
+              const updated = [...prev];
+              updated[updated.length - 1] = { role: "agent", text: updated[updated.length - 1].text + data.text };
+              return updated;
+            });
+          }
         } catch {}
       }
     }
@@ -114,7 +122,9 @@ export default function Chat({ onExpenseChange, className = "", token, username,
             <div className={`max-w-[85%] px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed ${
               m.role === "user"
                 ? "bg-primary text-primary-foreground rounded-br-sm"
-                : "bg-muted text-foreground rounded-bl-sm"
+                : m.error
+                  ? "bg-destructive/10 text-destructive rounded-bl-sm"
+                  : "bg-muted text-foreground rounded-bl-sm"
             }`}>
               {m.role === "agent"
                 ? <div className="prose prose-sm dark:prose-invert max-w-none [&_table]:text-xs [&_th]:py-1 [&_td]:py-1 [&_p]:my-0.5">

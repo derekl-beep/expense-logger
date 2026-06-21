@@ -53,11 +53,19 @@ def chat_endpoint(req: ChatRequest, user_id: int = Depends(get_current_user)):
 @app.post("/chat/stream")
 def chat_stream_endpoint(req: ChatRequest, user_id: int = Depends(get_current_user)):
     def generate():
-        for chunk in stream_chat(req.message, user_id):
-            yield f"data: {json.dumps({'text': chunk})}\n\n"
+        try:
+            for chunk in stream_chat(req.message, user_id):
+                yield f"data: {json.dumps({'text': chunk})}\n\n"
+        except Exception:
+            yield f"data: {json.dumps({'error': 'Something went wrong. Please try again.'})}\n\n"
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(generate(), media_type="text/event-stream")
+
+
+@app.get("/health")
+def health():
+    return {"ok": True}
 
 
 @app.get("/expenses")
