@@ -4,8 +4,7 @@ import remarkGfm from "remark-gfm";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-export default function Chat({ onExpenseChange, className = "", dark, onToggleDark }) {
-  const sessionId = useRef(crypto.randomUUID());
+export default function Chat({ onExpenseChange, className = "", token, username, onLogout, dark, onToggleDark }) {
   const [messages, setMessages] = useState([
     { role: "agent", text: "Hi! Log an expense or ask about your spending." },
   ]);
@@ -24,9 +23,14 @@ export default function Chat({ onExpenseChange, className = "", dark, onToggleDa
 
     const res = await fetch("http://localhost:8000/chat/stream", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: text, session_id: sessionId.current }),
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ message: text }),
     });
+
+    if (res.status === 401) { onLogout(); return; }
 
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
@@ -80,7 +84,12 @@ export default function Chat({ onExpenseChange, className = "", dark, onToggleDa
 
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
-        <span className="text-sm font-semibold text-foreground">Expense Logger</span>
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-semibold text-foreground">Expense Logger</span>
+          {username && (
+            <span className="text-xs text-muted-foreground">· {username}</span>
+          )}
+        </div>
         <div className="flex items-center gap-2">
           <button
             onClick={onToggleDark}
@@ -91,6 +100,9 @@ export default function Chat({ onExpenseChange, className = "", dark, onToggleDa
           </button>
           <Button variant="outline" size="sm" className="h-7 text-xs" onClick={sendMonthlySummary} disabled={loading}>
             This Month
+          </Button>
+          <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground" onClick={onLogout}>
+            Sign out
           </Button>
         </div>
       </div>

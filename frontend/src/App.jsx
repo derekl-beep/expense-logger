@@ -1,8 +1,11 @@
 import { useEffect, useState } from "react";
 import Chat from "./components/Chat";
 import ExpenseTable from "./components/ExpenseTable";
+import Login from "./components/Login";
 
 export default function App() {
+  const [token, setToken] = useState(() => localStorage.getItem("token"));
+  const [username, setUsername] = useState(() => localStorage.getItem("username") || "");
   const [expenses, setExpenses] = useState([]);
   const [activeTab, setActiveTab] = useState("chat");
   const [dark, setDark] = useState(() => localStorage.getItem("theme") === "dark");
@@ -12,13 +15,32 @@ export default function App() {
     localStorage.setItem("theme", dark ? "dark" : "light");
   }, [dark]);
 
-  const fetchExpenses = async () => {
-    const res = await fetch("http://localhost:8000/expenses");
-    const data = await res.json();
-    setExpenses(data);
+  const handleLogin = (tok, name) => {
+    setToken(tok);
+    setUsername(name);
   };
 
-  useEffect(() => { fetchExpenses(); }, []);
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("username");
+    setToken(null);
+    setUsername("");
+    setExpenses([]);
+  };
+
+  const fetchExpenses = async () => {
+    const res = await fetch("http://localhost:8000/expenses", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (res.status === 401) { handleLogout(); return; }
+    setExpenses(await res.json());
+  };
+
+  useEffect(() => {
+    if (token) fetchExpenses();
+  }, [token]);
+
+  if (!token) return <Login onLogin={handleLogin} />;
 
   const tabClass = (tab) =>
     `flex-1 py-3 text-sm font-medium border-b-2 transition-colors ${
@@ -42,13 +64,18 @@ export default function App() {
           <Chat
             className={activeTab === "chat" ? "flex" : "hidden md:flex"}
             onExpenseChange={() => { fetchExpenses(); setActiveTab("chat"); }}
+            token={token}
+            username={username}
+            onLogout={handleLogout}
             dark={dark}
             onToggleDark={() => setDark((d) => !d)}
           />
           <ExpenseTable
             className={activeTab === "expenses" ? "flex" : "hidden md:flex"}
             expenses={expenses}
+            token={token}
             onExpenseChange={fetchExpenses}
+            onUnauthorized={handleLogout}
           />
         </div>
 

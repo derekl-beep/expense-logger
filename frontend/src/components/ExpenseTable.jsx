@@ -31,7 +31,12 @@ const formatMonth = (ym) => {
   return new Date(year, month - 1).toLocaleString("default", { month: "long", year: "numeric" });
 };
 
-export default function ExpenseTable({ expenses, className = "", onExpenseChange }) {
+export default function ExpenseTable({ expenses, className = "", token, onExpenseChange, onUnauthorized }) {
+  const authFetch = (url, opts = {}) => {
+    const res = fetch(url, { ...opts, headers: { ...opts.headers, Authorization: `Bearer ${token}` } });
+    res.then((r) => { if (r.status === 401) onUnauthorized(); });
+    return res;
+  };
   const [selectedMonth, setSelectedMonth] = useState("all");
   const [flaggedOnly, setFlaggedOnly] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -55,7 +60,7 @@ export default function ExpenseTable({ expenses, className = "", onExpenseChange
 
   const toggleFlag = async (e, ev) => {
     ev.stopPropagation();
-    await fetch(`http://localhost:8000/expenses/${e.id}`, {
+    await authFetch(`http://localhost:8000/expenses/${e.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ flagged: !e.flagged }),
@@ -69,7 +74,7 @@ export default function ExpenseTable({ expenses, className = "", onExpenseChange
   };
 
   const saveEdit = async () => {
-    await fetch(`http://localhost:8000/expenses/${editingId}`, {
+    await authFetch(`http://localhost:8000/expenses/${editingId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(editValues),
@@ -79,14 +84,25 @@ export default function ExpenseTable({ expenses, className = "", onExpenseChange
   };
 
   const deleteRow = async (id) => {
-    await fetch(`http://localhost:8000/expenses/${id}`, { method: "DELETE" });
+    await authFetch(`http://localhost:8000/expenses/${id}`, { method: "DELETE" });
     onExpenseChange();
   };
 
   const clearAll = async () => {
     if (!confirm("Delete all expenses?")) return;
-    await fetch("http://localhost:8000/expenses", { method: "DELETE" });
+    await authFetch("http://localhost:8000/expenses", { method: "DELETE" });
     onExpenseChange();
+  };
+
+  const exportCSV = async () => {
+    const res = await authFetch("http://localhost:8000/expenses/export");
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "expenses.csv";
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -120,10 +136,10 @@ export default function ExpenseTable({ expenses, className = "", onExpenseChange
           <span className="text-xs text-muted-foreground">
             Total: <span className="font-semibold text-foreground">${total.toFixed(2)}</span>
           </span>
-          <a href="http://localhost:8000/expenses/export" download="expenses.csv"
+          <button onClick={exportCSV}
             className="h-7 px-2.5 text-xs inline-flex items-center rounded-md border border-border text-muted-foreground hover:bg-muted transition-colors">
             Export CSV
-          </a>
+          </button>
           <Button variant="destructive" size="sm" className="h-7 text-xs" onClick={clearAll}>Clear All</Button>
         </div>
       </div>

@@ -23,11 +23,14 @@ After saving, confirm with a friendly one-line message.
 _sessions: dict[str, list] = {}
 
 
-def _run_tools(response_content: list) -> list:
+def _run_tools(response_content: list, user_id: int) -> list:
     tool_results = []
     for block in response_content:
         if block.type == "tool_use":
-            result = TOOL_HANDLERS[block.name](**block.input)
+            kwargs = dict(block.input)
+            if block.name == "save_expense":
+                kwargs["user_id"] = user_id
+            result = TOOL_HANDLERS[block.name](**kwargs)
             tool_results.append({
                 "type": "tool_result",
                 "tool_use_id": block.id,
@@ -36,8 +39,8 @@ def _run_tools(response_content: list) -> list:
     return tool_results
 
 
-def chat(user_input: str, session_id: str) -> str:
-    messages = _sessions.setdefault(session_id, [])
+def chat(user_input: str, user_id: int) -> str:
+    messages = _sessions.setdefault(str(user_id), [])
     messages.append({"role": "user", "content": user_input})
 
     while True:
@@ -57,12 +60,12 @@ def chat(user_input: str, session_id: str) -> str:
                     return block.text
 
         if response.stop_reason == "tool_use":
-            tool_results = _run_tools(response.content)
+            tool_results = _run_tools(response.content, user_id)
             messages.append({"role": "user", "content": tool_results})
 
 
-def stream_chat(user_input: str, session_id: str):
-    messages = _sessions.setdefault(session_id, [])
+def stream_chat(user_input: str, user_id: int):
+    messages = _sessions.setdefault(str(user_id), [])
     messages.append({"role": "user", "content": user_input})
 
     while True:
@@ -83,7 +86,7 @@ def stream_chat(user_input: str, session_id: str):
             break
 
         if final.stop_reason == "tool_use":
-            tool_results = _run_tools(final.content)
+            tool_results = _run_tools(final.content, user_id)
             messages.append({"role": "user", "content": tool_results})
 
 

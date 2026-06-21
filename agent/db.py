@@ -4,6 +4,15 @@ conn = sqlite3.connect("expenses.db", check_same_thread=False)
 conn.row_factory = sqlite3.Row
 
 conn.execute("""
+    CREATE TABLE IF NOT EXISTS users (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        username      TEXT UNIQUE NOT NULL,
+        password_hash TEXT,
+        created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+""")
+
+conn.execute("""
     CREATE TABLE IF NOT EXISTS expenses (
         id          INTEGER PRIMARY KEY AUTOINCREMENT,
         amount      REAL,
@@ -11,20 +20,30 @@ conn.execute("""
         description TEXT,
         date        TEXT,
         flagged     INTEGER DEFAULT 0,
+        user_id     INTEGER REFERENCES users(id),
         created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
 """)
-try:
-    conn.execute("ALTER TABLE expenses ADD COLUMN flagged INTEGER DEFAULT 0")
-except Exception:
-    pass  # column already exists
+for col, definition in [
+    ("flagged", "INTEGER DEFAULT 0"),
+    ("user_id", "INTEGER REFERENCES users(id)"),
+]:
+    try:
+        conn.execute(f"ALTER TABLE expenses ADD COLUMN {col} {definition}")
+    except Exception:
+        pass  # column already exists
 conn.commit()
 
 
-def save_expense(amount: float, category: str, description: str, date: str) -> dict:
+def get_user_by_username(username: str) -> dict | None:
+    row = conn.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
+    return dict(row) if row else None
+
+
+def save_expense(amount: float, category: str, description: str, date: str, user_id: int = None) -> dict:
     conn.execute(
-        "INSERT INTO expenses (amount, category, description, date) VALUES (?, ?, ?, ?)",
-        (amount, category, description, date),
+        "INSERT INTO expenses (amount, category, description, date, user_id) VALUES (?, ?, ?, ?, ?)",
+        (amount, category, description, date, user_id),
     )
     conn.commit()
     return {"status": "saved"}
