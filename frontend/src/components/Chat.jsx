@@ -83,7 +83,8 @@ export default function Chat({ onExpenseChange, className = "", token, username,
           } else {
             setMessages((prev) => {
               const updated = [...prev];
-              updated[updated.length - 1] = { role: "agent", text: updated[updated.length - 1].text + data.text };
+              const last = updated[updated.length - 1];
+              updated[updated.length - 1] = { ...last, text: last.text + data.text };
               return updated;
             });
           }
