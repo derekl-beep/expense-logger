@@ -19,7 +19,8 @@ After saving, confirm with a friendly one-line message.
 {category_hints}"""
 
 
-messages: list = []
+# Conversation history keyed by session_id. Replaced by user_id in Phase 2 (auth).
+_sessions: dict[str, list] = {}
 
 
 def _run_tools(response_content: list) -> list:
@@ -35,7 +36,8 @@ def _run_tools(response_content: list) -> list:
     return tool_results
 
 
-def chat(user_input: str) -> str:
+def chat(user_input: str, session_id: str) -> str:
+    messages = _sessions.setdefault(session_id, [])
     messages.append({"role": "user", "content": user_input})
 
     while True:
@@ -59,7 +61,8 @@ def chat(user_input: str) -> str:
             messages.append({"role": "user", "content": tool_results})
 
 
-def stream_chat(user_input: str):
+def stream_chat(user_input: str, session_id: str):
+    messages = _sessions.setdefault(session_id, [])
     messages.append({"role": "user", "content": user_input})
 
     while True:

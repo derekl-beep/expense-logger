@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 export default function Chat({ onExpenseChange, className = "", dark, onToggleDark }) {
+  const sessionId = useRef(crypto.randomUUID());
   const [messages, setMessages] = useState([
     { role: "agent", text: "Hi! Log an expense or ask about your spending." },
   ]);
@@ -24,7 +25,7 @@ export default function Chat({ onExpenseChange, className = "", dark, onToggleDa
     const res = await fetch("http://localhost:8000/chat/stream", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: text }),
+      body: JSON.stringify({ message: text, session_id: sessionId.current }),
     });
 
     const reader = res.body.getReader();

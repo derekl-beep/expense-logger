@@ -147,6 +147,24 @@ Open `http://localhost:5173`.
 
 ---
 
+## Deployment Roadmap
+
+Phases to make the app production-ready for shared family use.
+
+| Phase | What | Why |
+|-------|------|-----|
+| 1 — Conversation isolation | Frontend owns history, sends `session_id` with each request | Global `messages` list is shared across all users today |
+| 2 — Auth + user model | JWT login, `users` table, `user_id` on expenses, seed script for family accounts | Access control + track who logged what |
+| 3 — Data safety | Remove `DELETE /expenses` (clear-all) endpoint | One call wipes all family data |
+| 4 — Postgres | Swap `sqlite3` → `psycopg2`, read `DATABASE_URL` from env | SQLite file doesn't survive Railway restarts |
+| 5 — Reliability | `try/except` on Claude stream → SSE error event; `GET /health` endpoint | Silent failures; Railway needs health checks |
+| 6 — API cost guard | `api_calls` table, daily limit per user via `DAILY_CALL_LIMIT` env var | Prevent runaway Claude API spend |
+| 7 — Deploy | Dockerfile, CORS → prod domain, env vars in Railway, smoke test | Ship it |
+
+Future extensions: per-user expense views (filter toggle, near-zero work once `user_id` exists), Google SSO (additive — new login path, same JWT layer).
+
+---
+
 ## How to Phase an LLM Project
 
 Phasing an LLM project is different from a regular app. The model handles what would take hundreds of lines of traditional parsing logic, so phases are about **adding control and reliability**, not features.

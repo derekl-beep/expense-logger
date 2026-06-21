@@ -23,18 +23,19 @@ app.add_middleware(
 
 class ChatRequest(BaseModel):
     message: str
+    session_id: str
 
 
 @app.post("/chat")
 def chat_endpoint(req: ChatRequest):
-    response = chat(req.message)
+    response = chat(req.message, req.session_id)
     return {"response": response}
 
 
 @app.post("/chat/stream")
 def chat_stream_endpoint(req: ChatRequest):
     def generate():
-        for chunk in stream_chat(req.message):
+        for chunk in stream_chat(req.message, req.session_id):
             yield f"data: {json.dumps({'text': chunk})}\n\n"
         yield "data: [DONE]\n\n"
 
