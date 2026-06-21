@@ -28,6 +28,14 @@ const CATEGORY_COLORS = {
 const formatDate = (d) =>
   new Date(d + "T00:00:00").toLocaleDateString("default", { month: "short", day: "numeric" });
 
+const formatSectionDate = (d) => {
+  const today = new Date().toISOString().slice(0, 10);
+  const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  if (d === today) return "Today";
+  if (d === yesterday) return "Yesterday";
+  return new Date(d + "T00:00:00").toLocaleDateString("default", { weekday: "short", month: "short", day: "numeric" });
+};
+
 const formatMonth = (ym) => {
   const [year, month] = ym.split("-");
   return new Date(year, month - 1).toLocaleString("default", { month: "long", year: "numeric" });
@@ -206,29 +214,36 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
       <div className="flex-1 overflow-y-auto">
 
         {/* ── Mobile card list ── */}
-        <div className="md:hidden divide-y divide-border">
+        <div className="md:hidden">
           {filtered.length === 0 ? (
             <p className="text-center py-16 text-muted-foreground text-sm">No expenses yet</p>
-          ) : filtered.map((e) => (
-            <div key={e.id} className="px-4 py-3 active:bg-muted transition-colors cursor-pointer" onClick={() => openEdit(e)}>
-              <div className="flex items-start justify-between gap-2">
-                <span className="text-sm font-medium text-foreground leading-snug">{e.description}</span>
-                <span className="text-sm font-semibold text-foreground tabular-nums shrink-0">${e.amount.toFixed(2)}</span>
+          ) : filtered.reduce((groups, e) => {
+            const last = groups[groups.length - 1];
+            if (!last || last.date !== e.date) groups.push({ date: e.date, items: [e] });
+            else last.items.push(e);
+            return groups;
+          }, []).map(({ date, items }) => (
+            <div key={date}>
+              <div className="px-4 py-1.5 bg-muted/60 sticky top-0 z-10 border-b border-border/50">
+                <span className="text-xs font-medium text-muted-foreground">{formatSectionDate(date)}</span>
               </div>
-              <div className="flex items-center justify-between mt-1.5">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground tabular-nums">{formatDate(e.date)}</span>
-                  <CategoryBadge category={e.category} small />
+              {items.map((e) => (
+                <div key={e.id} className="px-4 py-3 border-b border-border/50 active:bg-muted transition-colors cursor-pointer" onClick={() => openEdit(e)}>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-medium text-foreground leading-snug">{e.description}</span>
+                    <span className="text-sm font-semibold text-foreground tabular-nums shrink-0">${e.amount.toFixed(2)}</span>
+                  </div>
+                  <div className="flex items-center justify-between mt-1.5">
+                    <CategoryBadge category={e.category} small />
+                    <button
+                      onClick={(ev) => toggleFlag(e, ev)}
+                      className={`w-8 h-8 flex items-center justify-center rounded-md text-sm transition-colors ${
+                        e.flagged ? "text-amber-500 dark:text-amber-400" : "text-muted-foreground/30 hover:text-amber-500"
+                      }`}
+                    >⚑</button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-1" onClick={(ev) => ev.stopPropagation()}>
-                  <button
-                    onClick={(ev) => toggleFlag(e, ev)}
-                    className={`w-9 h-9 flex items-center justify-center rounded-md text-sm transition-colors ${
-                      e.flagged ? "text-amber-500 dark:text-amber-400" : "text-muted-foreground/40 hover:text-amber-500"
-                    }`}
-                  >⚑</button>
-                </div>
-              </div>
+              ))}
             </div>
           ))}
         </div>
