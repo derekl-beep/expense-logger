@@ -6,14 +6,29 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-conn = psycopg2.connect(os.environ["DATABASE_URL"], cursor_factory=psycopg2.extras.RealDictCursor)
-conn.autocommit = True
+_conn = None
+
+
+def _get_conn():
+    global _conn
+    if _conn is None or _conn.closed:
+        _conn = psycopg2.connect(os.environ["DATABASE_URL"], cursor_factory=psycopg2.extras.RealDictCursor)
+        _conn.autocommit = True
+    return _conn
 
 
 def _run(sql: str, params=None):
-    cur = conn.cursor()
-    cur.execute(sql, params or [])
-    return cur
+    try:
+        cur = _get_conn().cursor()
+        cur.execute(sql, params or [])
+        return cur
+    except psycopg2.InterfaceError:
+        # Connection was dropped (e.g. Neon idle timeout) — reconnect and retry once
+        global _conn
+        _conn = None
+        cur = _get_conn().cursor()
+        cur.execute(sql, params or [])
+        return cur
 
 
 def _row(r: dict) -> dict:
