@@ -95,6 +95,8 @@ def create_user(username: str, password_hash: str) -> None:
 
 
 def save_expense(amount: float, category: str, description: str, date: str, user_id: int = None) -> dict:
+    if description:
+        description = description[0].upper() + description[1:]
     cur = _run(
         "INSERT INTO expenses (amount, category, description, date, user_id) VALUES (%s, %s, %s, %s, %s) RETURNING id",
         (amount, category, description, date, user_id),
