@@ -88,12 +88,6 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
     onExpenseChange();
   };
 
-  const clearAll = async () => {
-    if (!confirm("Delete all expenses?")) return;
-    await authFetch("http://localhost:8000/expenses", { method: "DELETE" });
-    onExpenseChange();
-  };
-
   const exportCSV = async () => {
     const res = await authFetch("http://localhost:8000/expenses/export");
     const blob = await res.blob();
@@ -140,7 +134,6 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
             className="h-7 px-2.5 text-xs inline-flex items-center rounded-md border border-border text-muted-foreground hover:bg-muted transition-colors">
             Export CSV
           </button>
-          <Button variant="destructive" size="sm" className="h-7 text-xs" onClick={clearAll}>Clear All</Button>
         </div>
       </div>
 

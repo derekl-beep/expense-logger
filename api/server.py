@@ -9,7 +9,6 @@ from pydantic import BaseModel
 
 from agent.categories import CATEGORIES
 from agent.db import (
-    clear_expenses,
     delete_expense,
     get_expenses,
     get_user_by_username,
@@ -88,10 +87,6 @@ def update_expense_endpoint(id: int, req: UpdateRequest, user_id: int = Depends(
 def delete_expense_endpoint(id: int, user_id: int = Depends(get_current_user)):
     return delete_expense(id)
 
-
-@app.delete("/expenses")
-def clear_expenses_endpoint(user_id: int = Depends(get_current_user)):
-    return clear_expenses()
 
 
 @app.get("/expenses/export")
