@@ -228,20 +228,16 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
                 <span className="text-xs font-medium text-muted-foreground">{formatSectionDate(date)}</span>
               </div>
               {items.map((e) => (
-                <div key={e.id} className="px-4 py-3 border-b border-border/50 active:bg-muted transition-colors cursor-pointer" onClick={() => openEdit(e)}>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-sm font-medium text-foreground leading-snug">{e.description}</span>
-                    <span className="text-sm font-semibold text-foreground tabular-nums shrink-0">${e.amount.toFixed(2)}</span>
-                  </div>
-                  <div className="flex items-center justify-between mt-1.5">
-                    <CategoryBadge category={e.category} small />
-                    <button
-                      onClick={(ev) => toggleFlag(e, ev)}
-                      className={`w-8 h-8 flex items-center justify-center rounded-md text-sm transition-colors ${
-                        e.flagged ? "text-amber-500 dark:text-amber-400" : "text-muted-foreground/30 hover:text-amber-500"
-                      }`}
-                    >⚑</button>
-                  </div>
+                <div key={e.id} className="flex items-center gap-3 px-4 py-3 border-b border-border/50 active:bg-muted transition-colors cursor-pointer" onClick={() => openEdit(e)}>
+                  <CategoryBadge category={e.category} small />
+                  <span className="flex-1 text-sm font-medium text-foreground truncate">{e.description}</span>
+                  <span className="text-sm font-semibold text-foreground tabular-nums shrink-0">${e.amount.toFixed(2)}</span>
+                  <button
+                    onClick={(ev) => toggleFlag(e, ev)}
+                    className={`shrink-0 w-7 h-7 flex items-center justify-center rounded-md text-sm transition-colors ${
+                      e.flagged ? "text-amber-500 dark:text-amber-400" : "text-muted-foreground/30 hover:text-amber-500"
+                    }`}
+                  >⚑</button>
                 </div>
               ))}
             </div>
