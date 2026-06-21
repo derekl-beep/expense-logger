@@ -11,10 +11,27 @@ load_dotenv()
 
 client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
 
-SYSTEM = """You are a personal expense tracking assistant.
-When the user describes an expense, extract the details and call save_expense.
-Resolve vague dates like 'today' or 'yesterday'. Today's date is {today}.
-After saving, confirm with a friendly one-line message.
+SYSTEM = """You are a personal expense tracking assistant for {username}.
+Today's date is {today}.
+
+## Logging expenses
+When the user describes one or more expenses, extract each one and call save_expense for each.
+Resolve vague dates like 'today', 'yesterday', or 'last Monday' to an ISO date.
+When a bare weekday name is given (e.g. "Friday", "Fri"), always assume the most recent past occurrence — never ask for clarification.
+After saving, confirm with a short, friendly message (one line per expense is fine).
+
+## Querying expenses
+When the user asks about spending, call get_expenses with appropriate filters.
+Use logged_by to filter by who logged the expense (e.g. "derek" or "kelly").
+Present results clearly with a total where useful.
+
+## Editing and flagging
+To update or flag an expense, first call get_expenses to find the right record, then call update_expense.
+If the user refers to "the last one", "that expense", or similar, call get_expenses (no filters, most recent first) to identify it by context.
+Flagging marks an expense for follow-up (flagged=true). Unflagging clears it (flagged=false).
+
+## Deleting
+To delete, first call get_expenses to find the ID, then call delete_expense.
 
 {category_hints}"""
 
@@ -39,15 +56,15 @@ def _run_tools(response_content: list, user_id: int) -> list:
     return tool_results
 
 
-def chat(user_input: str, user_id: int) -> str:
+def chat(user_input: str, user_id: int, username: str = "user") -> str:
     messages = _sessions.setdefault(str(user_id), [])
     messages.append({"role": "user", "content": user_input})
 
     while True:
         response = client.messages.create(
             model="claude-haiku-4-5-20251001",
-            max_tokens=1024,
-            system=SYSTEM.format(today=date.today().isoformat(), category_hints=CATEGORY_HINTS),
+            max_tokens=2048,
+            system=SYSTEM.format(today=date.today().isoformat(), username=username, category_hints=CATEGORY_HINTS),
             tools=TOOL_DEFINITIONS,
             messages=messages,
         )
@@ -64,15 +81,15 @@ def chat(user_input: str, user_id: int) -> str:
             messages.append({"role": "user", "content": tool_results})
 
 
-def stream_chat(user_input: str, user_id: int):
+def stream_chat(user_input: str, user_id: int, username: str = "user"):
     messages = _sessions.setdefault(str(user_id), [])
     messages.append({"role": "user", "content": user_input})
 
     while True:
         with client.messages.stream(
             model="claude-haiku-4-5-20251001",
-            max_tokens=1024,
-            system=SYSTEM.format(today=date.today().isoformat(), category_hints=CATEGORY_HINTS),
+            max_tokens=2048,
+            system=SYSTEM.format(today=date.today().isoformat(), username=username, category_hints=CATEGORY_HINTS),
             tools=TOOL_DEFINITIONS,
             messages=messages,
         ) as stream:

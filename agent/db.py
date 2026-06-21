@@ -84,6 +84,12 @@ def get_user_by_username(username: str) -> dict | None:
     return dict(row) if row else None
 
 
+def get_user_by_id(user_id: int) -> dict | None:
+    cur = _run("SELECT * FROM users WHERE id = %s", (user_id,))
+    row = cur.fetchone()
+    return dict(row) if row else None
+
+
 def create_user(username: str, password_hash: str) -> None:
     _run("INSERT INTO users (username, password_hash) VALUES (%s, %s)", (username, password_hash))
 
@@ -96,19 +102,27 @@ def save_expense(amount: float, category: str, description: str, date: str, user
     return {"status": "saved"}
 
 
-def get_expenses(start_date: str = None, end_date: str = None, category: str = None) -> list[dict]:
-    query = "SELECT id, amount, category, description, date, flagged FROM expenses WHERE 1=1"
+def get_expenses(start_date: str = None, end_date: str = None, category: str = None, logged_by: str = None) -> list[dict]:
+    query = """
+        SELECT e.id, e.amount, e.category, e.description, e.date, e.flagged
+        FROM expenses e
+        LEFT JOIN users u ON e.user_id = u.id
+        WHERE 1=1
+    """
     params = []
     if start_date:
-        query += " AND date >= %s"
+        query += " AND e.date >= %s"
         params.append(start_date)
     if end_date:
-        query += " AND date <= %s"
+        query += " AND e.date <= %s"
         params.append(end_date)
     if category:
-        query += " AND LOWER(category) = LOWER(%s)"
+        query += " AND LOWER(e.category) = LOWER(%s)"
         params.append(category)
-    query += " ORDER BY date DESC, id DESC"
+    if logged_by:
+        query += " AND LOWER(u.username) = LOWER(%s)"
+        params.append(logged_by)
+    query += " ORDER BY e.date DESC, e.id DESC"
     cur = _run(query, params)
     return [_row(r) for r in cur.fetchall()]
 

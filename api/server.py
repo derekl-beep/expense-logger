@@ -16,6 +16,7 @@ from agent.db import (
     delete_expense,
     get_api_call_count,
     get_expenses,
+    get_user_by_id,
     get_user_by_username,
     increment_api_call_count,
     update_expense,
@@ -68,17 +69,24 @@ class ChatRequest(BaseModel):
     message: str
 
 
+def _get_username(user_id: int) -> str:
+    user = get_user_by_id(user_id)
+    return user["username"] if user else "user"
+
+
 @app.post("/chat")
 def chat_endpoint(req: ChatRequest, user_id: int = Depends(check_rate_limit)):
-    response = chat(req.message, user_id)
+    response = chat(req.message, user_id, _get_username(user_id))
     return {"response": response}
 
 
 @app.post("/chat/stream")
 def chat_stream_endpoint(req: ChatRequest, user_id: int = Depends(check_rate_limit)):
+    username = _get_username(user_id)
+
     def generate():
         try:
-            for chunk in stream_chat(req.message, user_id):
+            for chunk in stream_chat(req.message, user_id, username):
                 yield f"data: {json.dumps({'text': chunk})}\n\n"
         except Exception:
             yield f"data: {json.dumps({'error': 'Something went wrong. Please try again.'})}\n\n"
