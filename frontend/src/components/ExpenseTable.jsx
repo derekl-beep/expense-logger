@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 
 const CATEGORY_COLORS = {
   "Dining":        "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400",
@@ -48,7 +50,7 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
 
   const [selectedMonth, setSelectedMonth] = useState("all");
   const [flaggedOnly, setFlaggedOnly] = useState(false);
-  const [editingId, setEditingId] = useState(null);
+  const [editingExpense, setEditingExpense] = useState(null);
   const [editValues, setEditValues] = useState({});
   const [categories, setCategories] = useState([]);
 
@@ -77,23 +79,24 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
     onExpenseChange();
   };
 
-  const startEdit = (e) => {
-    setEditingId(e.id);
-    setEditValues({ amount: e.amount, category: e.category, description: e.description, date: e.date });
+  const openEdit = (e) => {
+    setEditingExpense(e);
+    setEditValues({ amount: e.amount, category: e.category, description: e.description, date: e.date, flagged: !!e.flagged });
   };
 
   const saveEdit = async () => {
-    await authFetch(`/expenses/${editingId}`, {
+    await authFetch(`/expenses/${editingExpense.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(editValues),
     });
-    setEditingId(null);
+    setEditingExpense(null);
     onExpenseChange();
   };
 
-  const deleteRow = async (id) => {
-    await authFetch(`/expenses/${id}`, { method: "DELETE" });
+  const deleteExpense = async () => {
+    await authFetch(`/expenses/${editingExpense.id}`, { method: "DELETE" });
+    setEditingExpense(null);
     onExpenseChange();
   };
 
@@ -108,65 +111,61 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
     URL.revokeObjectURL(url);
   };
 
-  const EditForm = ({ mobile = false }) => (
-    <div className={mobile
-      ? "p-4 bg-muted border-b border-border space-y-2"
-      : "contents"
-    }>
-      {mobile ? (
-        <>
-          <Input value={editValues.description} className="h-9 text-sm"
-            placeholder="Description"
-            onChange={(ev) => setEditValues({ ...editValues, description: ev.target.value })} />
-          <div className="flex gap-2">
-            <Input type="date" value={editValues.date} className="h-9 text-sm flex-1"
-              onChange={(ev) => setEditValues({ ...editValues, date: ev.target.value })} />
-            <Input type="number" step="0.01" value={editValues.amount} className="h-9 text-sm w-28 text-right"
-              onChange={(ev) => setEditValues({ ...editValues, amount: parseFloat(ev.target.value) })} />
-          </div>
-          <Select value={editValues.category} onValueChange={(v) => setEditValues({ ...editValues, category: v })}>
-            <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
-            <SelectContent>{categories.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
-          </Select>
-          <div className="flex gap-2 pt-1">
-            <button onClick={saveEdit} className="flex-1 h-9 rounded-md text-sm bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">Save</button>
-            <button onClick={() => setEditingId(null)} className="flex-1 h-9 rounded-md text-sm border border-border text-muted-foreground hover:bg-muted transition-colors">Cancel</button>
-          </div>
-        </>
-      ) : (
-        <tr className="bg-muted border-b border-border">
-          <td className="px-3 py-2">
-            <Input type="date" value={editValues.date} className="h-8 text-xs"
-              onChange={(ev) => setEditValues({ ...editValues, date: ev.target.value })} />
-          </td>
-          <td className="px-3 py-2">
-            <Input value={editValues.description} className="h-8 text-xs"
-              onChange={(ev) => setEditValues({ ...editValues, description: ev.target.value })} />
-          </td>
-          <td className="px-3 py-2">
-            <Select value={editValues.category} onValueChange={(v) => setEditValues({ ...editValues, category: v })}>
-              <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-              <SelectContent>{categories.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
-            </Select>
-          </td>
-          <td className="px-3 py-2">
-            <Input type="number" step="0.01" value={editValues.amount} className="h-8 text-xs text-right"
-              onChange={(ev) => setEditValues({ ...editValues, amount: parseFloat(ev.target.value) })} />
-          </td>
-          <td></td>
-          <td className="px-2 py-2">
-            <div className="flex gap-1">
-              <button onClick={saveEdit} className="w-9 h-9 rounded text-xs bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">✓</button>
-              <button onClick={() => setEditingId(null)} className="w-9 h-9 rounded text-xs border border-border text-muted-foreground hover:bg-muted transition-colors">✕</button>
-            </div>
-          </td>
-        </tr>
-      )}
-    </div>
-  );
-
   return (
     <div className={`${className} flex-col flex-1 overflow-hidden bg-background`}>
+
+      {/* Edit modal — shared between mobile and desktop */}
+      <Dialog open={!!editingExpense} onOpenChange={(open) => { if (!open) setEditingExpense(null); }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-sm font-semibold">Edit Expense</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-1">
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Description</label>
+              <Input value={editValues.description ?? ""} className="h-9 text-sm"
+                onChange={(e) => setEditValues({ ...editValues, description: e.target.value })} />
+            </div>
+            <div className="flex gap-2">
+              <div className="flex-1">
+                <label className="text-xs text-muted-foreground mb-1 block">Date</label>
+                <Input type="date" value={editValues.date ?? ""} className="h-9 text-sm"
+                  onChange={(e) => setEditValues({ ...editValues, date: e.target.value })} />
+              </div>
+              <div className="w-28">
+                <label className="text-xs text-muted-foreground mb-1 block">Amount</label>
+                <Input type="number" step="0.01" value={editValues.amount ?? ""} className="h-9 text-sm text-right"
+                  onChange={(e) => setEditValues({ ...editValues, amount: parseFloat(e.target.value) })} />
+              </div>
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Category</label>
+              <Select value={editValues.category} onValueChange={(v) => setEditValues({ ...editValues, category: v })}>
+                <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                <SelectContent>{categories.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <button
+              onClick={() => setEditValues({ ...editValues, flagged: !editValues.flagged })}
+              className={`flex items-center gap-2 text-xs px-3 py-2 rounded-md border w-full transition-colors ${
+                editValues.flagged
+                  ? "border-amber-400 bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-700"
+                  : "border-border text-muted-foreground hover:bg-muted"
+              }`}
+            >
+              <span>⚑</span>
+              <span>{editValues.flagged ? "Flagged for follow-up" : "Flag for follow-up"}</span>
+            </button>
+          </div>
+          <DialogFooter className="flex-row gap-2 sm:justify-between">
+            <Button variant="destructive" size="sm" className="text-xs" onClick={deleteExpense}>Delete</Button>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" className="text-xs" onClick={() => setEditingExpense(null)}>Cancel</Button>
+              <Button size="sm" className="text-xs" onClick={saveEdit}>Save</Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Header */}
       <div className="flex flex-col gap-2 px-4 py-3 border-b border-border shrink-0 md:flex-row md:items-center md:justify-between md:px-5">
@@ -178,9 +177,7 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-            <SelectTrigger className="h-8 text-xs w-32">
-              <SelectValue />
-            </SelectTrigger>
+            <SelectTrigger className="h-8 text-xs w-32"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All time</SelectItem>
               {months.map((m) => <SelectItem key={m} value={m}>{formatMonth(m)}</SelectItem>)}
@@ -213,42 +210,25 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
           {filtered.length === 0 ? (
             <p className="text-center py-16 text-muted-foreground text-sm">No expenses yet</p>
           ) : filtered.map((e) => (
-            <div key={e.id}>
-              {editingId === e.id ? (
-                <EditForm mobile />
-              ) : (
-                <div
-                  className="px-4 py-3 active:bg-muted transition-colors cursor-pointer"
-                  onClick={() => startEdit(e)}
-                >
-                  {/* Top line: description + amount */}
-                  <div className="flex items-start justify-between gap-2">
-                    <span className="text-sm font-medium text-foreground leading-snug">{e.description}</span>
-                    <span className="text-sm font-semibold text-foreground tabular-nums shrink-0">${e.amount.toFixed(2)}</span>
-                  </div>
-                  {/* Bottom line: date + category badge + actions */}
-                  <div className="flex items-center justify-between mt-1.5">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground tabular-nums">{formatDate(e.date)}</span>
-                      <CategoryBadge category={e.category} small />
-                    </div>
-                    <div className="flex items-center gap-1" onClick={(ev) => ev.stopPropagation()}>
-                      <button
-                        onClick={(ev) => toggleFlag(e, ev)}
-                        className={`w-9 h-9 flex items-center justify-center rounded-md text-sm transition-colors ${
-                          e.flagged
-                            ? "text-amber-500 dark:text-amber-400"
-                            : "text-muted-foreground/40 hover:text-amber-500"
-                        }`}
-                      >⚑</button>
-                      <button
-                        onClick={() => deleteRow(e.id)}
-                        className="w-9 h-9 flex items-center justify-center rounded-md text-sm text-muted-foreground/40 hover:text-destructive hover:bg-destructive/10 transition-colors"
-                      >✕</button>
-                    </div>
-                  </div>
+            <div key={e.id} className="px-4 py-3 active:bg-muted transition-colors cursor-pointer" onClick={() => openEdit(e)}>
+              <div className="flex items-start justify-between gap-2">
+                <span className="text-sm font-medium text-foreground leading-snug">{e.description}</span>
+                <span className="text-sm font-semibold text-foreground tabular-nums shrink-0">${e.amount.toFixed(2)}</span>
+              </div>
+              <div className="flex items-center justify-between mt-1.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground tabular-nums">{formatDate(e.date)}</span>
+                  <CategoryBadge category={e.category} small />
                 </div>
-              )}
+                <div className="flex items-center gap-1" onClick={(ev) => ev.stopPropagation()}>
+                  <button
+                    onClick={(ev) => toggleFlag(e, ev)}
+                    className={`w-9 h-9 flex items-center justify-center rounded-md text-sm transition-colors ${
+                      e.flagged ? "text-amber-500 dark:text-amber-400" : "text-muted-foreground/40 hover:text-amber-500"
+                    }`}
+                  >⚑</button>
+                </div>
+              </div>
             </div>
           ))}
         </div>
@@ -268,34 +248,33 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
           <tbody>
             {filtered.length === 0 ? (
               <tr><td colSpan={6} className="text-center py-16 text-muted-foreground text-sm">No expenses yet</td></tr>
-            ) : filtered.map((e) =>
-              editingId === e.id
-                ? <EditForm key={e.id} />
-                : (
-                  <tr key={e.id} className="border-b border-border/50 hover:bg-muted/50 cursor-pointer group transition-colors"
-                    onClick={() => startEdit(e)}>
-                    <td className="px-4 py-3 text-xs text-muted-foreground tabular-nums whitespace-nowrap">{formatDate(e.date)}</td>
-                    <td className="px-3 py-3 text-sm text-foreground">{e.description}</td>
-                    <td className="px-3 py-3"><CategoryBadge category={e.category} /></td>
-                    <td className="px-3 py-3 text-right text-sm font-medium text-foreground tabular-nums">${e.amount.toFixed(2)}</td>
-                    <td className="py-3 px-1">
-                      <button
-                        onClick={(ev) => toggleFlag(e, ev)}
-                        className={`w-9 h-9 flex items-center justify-center rounded-md text-sm transition-all ${
-                          e.flagged
-                            ? "text-amber-500 dark:text-amber-400"
-                            : "opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-amber-500"
-                        }`}
-                      >⚑</button>
-                    </td>
-                    <td className="py-3 px-1">
-                      <button
-                        className="opacity-0 group-hover:opacity-100 w-9 h-9 flex items-center justify-center rounded-md text-sm text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all"
-                        onClick={(ev) => { ev.stopPropagation(); deleteRow(e.id); }}>✕</button>
-                    </td>
-                  </tr>
-                )
-            )}
+            ) : filtered.map((e) => (
+              <tr key={e.id}
+                className="border-b border-border/50 hover:bg-muted/50 cursor-pointer group transition-colors"
+                onClick={() => openEdit(e)}
+              >
+                <td className="px-4 py-3 text-xs text-muted-foreground tabular-nums whitespace-nowrap">{formatDate(e.date)}</td>
+                <td className="px-3 py-3 text-sm text-foreground">{e.description}</td>
+                <td className="px-3 py-3"><CategoryBadge category={e.category} /></td>
+                <td className="px-3 py-3 text-right text-sm font-medium text-foreground tabular-nums">${e.amount.toFixed(2)}</td>
+                <td className="py-3 px-1">
+                  <button
+                    onClick={(ev) => toggleFlag(e, ev)}
+                    className={`w-9 h-9 flex items-center justify-center rounded-md text-sm transition-all ${
+                      e.flagged
+                        ? "text-amber-500 dark:text-amber-400"
+                        : "opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-amber-500"
+                    }`}
+                  >⚑</button>
+                </td>
+                <td className="py-3 px-1">
+                  <button
+                    className="opacity-0 group-hover:opacity-100 w-9 h-9 flex items-center justify-center rounded-md text-sm text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all"
+                    onClick={async (ev) => { ev.stopPropagation(); await authFetch(`/expenses/${e.id}`, { method: "DELETE" }); onExpenseChange(); }}
+                  >✕</button>
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
 

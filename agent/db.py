@@ -108,7 +108,7 @@ def get_expenses(start_date: str = None, end_date: str = None, category: str = N
     if category:
         query += " AND LOWER(category) = LOWER(%s)"
         params.append(category)
-    query += " ORDER BY date DESC"
+    query += " ORDER BY date DESC, id DESC"
     cur = _run(query, params)
     return [_row(r) for r in cur.fetchall()]
 
