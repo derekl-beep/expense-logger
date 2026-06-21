@@ -1,18 +1,15 @@
 #!/usr/bin/env python
 """One-time script to seed family user accounts. Run once after deploying."""
+import bcrypt
 import getpass
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from passlib.context import CryptContext
-
 from agent.db import conn
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-USERNAMES = ["derek", "family"]
+USERNAMES = ["derek", "kelly"]
 
 print("Seeding family accounts. Passwords are hashed before storage.\n")
 
@@ -24,7 +21,7 @@ for username in USERNAMES:
     try:
         conn.execute(
             "INSERT INTO users (username, password_hash) VALUES (?, ?)",
-            (username, pwd_context.hash(password)),
+            (username, bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()),
         )
         print(f"  Created: {username}\n")
     except Exception as e:
