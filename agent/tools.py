@@ -1,5 +1,5 @@
 from agent.categories import CATEGORIES
-from agent.db import delete_expense, get_expenses, save_expense, update_expense
+from agent.db import delete_expense, find_similar_expenses, get_expenses, save_expense, update_expense
 
 _category_enum = {"type": "string", "enum": CATEGORIES}
 
@@ -16,6 +16,17 @@ TOOL_DEFINITIONS = [
                 "date":        {"type": "string", "description": "ISO date, e.g. 2025-01-13"},
             },
             "required": ["amount", "category", "description", "date"],
+        },
+    },
+    {
+        "name": "find_similar_expense",
+        "description": "Fuzzy-search past expense descriptions for vendor/category recall (e.g. matching 'Starbucks' against a previously logged 'Coffee at Starbucks'). Call this before asking the user for a category when logging a new expense. Returns an empty list if nothing matches closely — in that case, categorize from your own knowledge of the vendor instead of asking.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "description": {"type": "string", "description": "The new expense's description or vendor name to match against history"},
+            },
+            "required": ["description"],
         },
     },
     {
@@ -62,8 +73,9 @@ TOOL_DEFINITIONS = [
 ]
 
 TOOL_HANDLERS = {
-    "save_expense":   save_expense,
-    "get_expenses":   get_expenses,
-    "update_expense": update_expense,
-    "delete_expense": delete_expense,
+    "save_expense":        save_expense,
+    "find_similar_expense": find_similar_expenses,
+    "get_expenses":        get_expenses,
+    "update_expense":      update_expense,
+    "delete_expense":      delete_expense,
 }
