@@ -4,32 +4,34 @@ A personal expense tracker powered by an AI agent. Describe expenses in plain En
 
 > Built as a side project to explore how agentic AI changes application development.
 
+![Expense Logger demo](https://github.com/user-attachments/assets/b0149768-1d47-4b18-a4ce-b4a74ba98cdb)
+
 ---
 
 ## Features
 
 - **Natural language input** — _"$12 lunch at the food court"_ is all you need to type
 - **Agentic decisions** — infers category, resolves vague dates like "yesterday", asks when unclear
+- **Vendor memory** — fuzzy-matches new expenses against past descriptions (Postgres trigram similarity) to reuse a vendor's category instead of asking again
+- **Duplicate detection** — flags same-day, same-amount, similar-description expenses for review instead of silently double-logging
 - **Full CRUD via chat** — update or delete past expenses through conversation
 - **Live expense table** — updates after every message, filterable by month and flagged status
 - **Monthly summary** — one-click breakdown by category with observations
 - **CSV export** — download all expenses anytime
-- **Dark mode** — persisted across sessions
+- **Installable on mobile** — add-to-home-screen support, dark mode persisted across sessions
 - **Multi-user** — JWT auth, per-session conversation isolation, shared expense pool
 
 ---
 
 ## Roadmap
 
-Coming features, in priority order (each builds on the one before it):
+Coming next, in priority order (each builds on the one before it):
 
 | # | Feature | Why |
 |---|---|---|
-| 1 | Vendor memory | Stop re-asking for category on repeat vendors — check past expenses for similar descriptions first |
-| 2 | Duplicate detection | Catch re-logged expenses before bulk imports make it a real problem |
-| 3 | Photo → auto-log | Snap a receipt or bank app transaction screenshot, agent extracts and logs the line items |
-| 4 | Email forwarding | Forward order/receipt emails to a dedicated inbox, agent extracts and logs automatically |
-| 5 | Family group chat bot | Log expenses from wherever the family already chats (WhatsApp/Telegram), not just the web app |
+| 1 | Photo → auto-log | Snap a receipt or bank app transaction screenshot, agent extracts and logs the line items |
+| 2 | Email forwarding | Forward order/receipt emails to a dedicated inbox, agent extracts and logs automatically |
+| 3 | Family group chat bot | Log expenses from wherever the family already chats (WhatsApp/Telegram), not just the web app |
 
 ---
 
@@ -61,20 +63,15 @@ FastAPI
      ▼
 Agent loop  ──────────────────────────────────────┐
 │  1. Send user message + history to Claude        │
-│  2. Claude responds with tool_call               │
-│  3. Execute tool (save / get / update / delete)  │◄── PostgreSQL
-│  4. Send tool result back to Claude              │
-│  5. Claude streams natural language response     │
+│  2. Claude responds with a tool_call              │
+│  3. Execute tool (save / find_similar / get /     │◄── PostgreSQL
+│     update / delete)                              │
+│  4. Send tool result back to Claude               │
+│  5. Claude streams natural language response      │
 └──────────────────────────────────────────────────┘
 ```
 
-### The 3 layers of an agentic app
-
-| Layer | What it is | What you write |
-|---|---|---|
-| Agent | LLM + system prompt | Prompt that defines how Claude thinks |
-| Tool definitions | JSON schemas | Contracts describing available functions |
-| Tool implementations | Python functions | Plain executors — read/write the DB |
+There's no business logic in the API layer beyond auth and rate-limiting — every decision (category inference, vendor matching, duplicate flagging, date resolution) happens inside the agent loop or its tools.
 
 ---
 
@@ -83,7 +80,7 @@ Agent loop  ──────────────────────�
 ```
 expense-logger/
 ├── agent/
-│   ├── main.py         # agent loop + streaming
+│   ├── main.py         # agent loop + streaming + system prompt
 │   ├── tools.py        # tool definitions + handler map
 │   ├── db.py           # PostgreSQL queries (psycopg2)
 │   └── categories.py   # fixed category list (17 categories)
@@ -186,23 +183,8 @@ The app is packaged as a single Docker image — FastAPI serves both the API and
 | Agent loop with tool results | `agent/main.py` — `chat()` and `stream_chat()` |
 | Streaming responses (SSE) | `api/server.py` → `Chat.jsx` |
 | Multi-tool chaining | Update/delete — Claude queries first, then acts |
+| Retrieval before generation | `find_similar_expense` — fuzzy DB lookup grounds category choice before the model falls back to its own judgment |
 | Per-user conversation isolation | `_sessions` dict keyed by `user_id` in `agent/main.py` |
 | Constrained output | Category field uses JSON schema `enum` |
 | JWT auth as FastAPI dependency | `api/auth.py` → `Depends(get_current_user)` |
 | API cost guard | `check_rate_limit` dependency on all chat endpoints |
-
----
-
-## How to Phase an LLM Project
-
-Phasing an LLM project differs from a regular app. The model handles what would take hundreds of lines of parsing logic — so phases are about **adding control and reliability**, not features.
-
-| Phase | Goal |
-|---|---|
-| 1 — Prove it works | Happy path end-to-end in a single file |
-| 2 — Handle the real world | Ambiguity, multi-tool chaining, conversation history |
-| 3 — Make it usable | UI, streaming, responsive layout |
-| 4 — Polish | Fixed categories, summaries, CSV export |
-| 5 — Production | Auth, Postgres, rate limiting, deployment |
-
-MVP = minimum *prompt + tools* to prove the model handles the core task. Phase 1 fits in ~50 lines of Python.
