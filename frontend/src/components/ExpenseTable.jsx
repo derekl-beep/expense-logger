@@ -112,7 +112,7 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
     return res;
   };
 
-  const [selectedMonth, setSelectedMonth] = useState("all");
+  const [selectedMonthOverride, setSelectedMonthOverride] = useState(null);
   const [flaggedOnly, setFlaggedOnly] = useState(false);
   const [editingExpense, setEditingExpense] = useState(null);
   const [editValues, setEditValues] = useState({});
@@ -137,6 +137,8 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
     items.forEach((e) => seen.add(e.date.slice(0, 7)));
     return Array.from(seen).sort().reverse();
   }, [items]);
+
+  const selectedMonth = selectedMonthOverride ?? (months[0] ?? "all");
 
   const monthFlagFiltered = items
     .filter((e) => selectedMonth === "all" || e.date.startsWith(selectedMonth))
@@ -314,7 +316,7 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
           </span>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+          <Select value={selectedMonth} onValueChange={setSelectedMonthOverride}>
             <SelectTrigger className="h-8 text-xs w-32"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All time</SelectItem>
