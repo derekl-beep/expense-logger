@@ -120,6 +120,7 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
   const [overrides, setOverrides] = useState({});
   const [deletedIds, setDeletedIds] = useState(() => new Set());
   const [showAllCategories, setShowAllCategories] = useState(false);
+  const [categoryFilter, setCategoryFilter] = useState(null);
 
   useEffect(() => {
     fetch("/categories").then((r) => r.json()).then(setCategories);
@@ -137,19 +138,21 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
     return Array.from(seen).sort().reverse();
   }, [items]);
 
-  const filtered = items
+  const monthFlagFiltered = items
     .filter((e) => selectedMonth === "all" || e.date.startsWith(selectedMonth))
     .filter((e) => !flaggedOnly || e.flagged);
+  const filtered = monthFlagFiltered.filter((e) => !categoryFilter || e.category === categoryFilter);
   const total = filtered.reduce((sum, e) => sum + e.amount, 0);
 
   const categoryTotals = {};
-  filtered.forEach((e) => { categoryTotals[e.category] = (categoryTotals[e.category] || 0) + e.amount; });
+  monthFlagFiltered.forEach((e) => { categoryTotals[e.category] = (categoryTotals[e.category] || 0) + e.amount; });
+  const categoryGrandTotal = monthFlagFiltered.reduce((sum, e) => sum + e.amount, 0);
   const maxCategoryTotal = Math.max(0, ...Object.values(categoryTotals));
   const breakdown = Object.entries(categoryTotals)
     .map(([category, amount]) => ({
       category,
       amount,
-      pct: total ? (amount / total) * 100 : 0,
+      pct: categoryGrandTotal ? (amount / categoryGrandTotal) * 100 : 0,
       barPct: maxCategoryTotal ? (amount / maxCategoryTotal) * 100 : 0,
     }))
     .sort((a, b) => b.amount - a.amount);
@@ -310,7 +313,7 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
             Total: <span className="font-semibold text-foreground">${total.toFixed(2)}</span>
           </span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <Select value={selectedMonth} onValueChange={setSelectedMonth}>
             <SelectTrigger className="h-8 text-xs w-32"><SelectValue /></SelectTrigger>
             <SelectContent>
@@ -318,6 +321,15 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
               {months.map((m) => <SelectItem key={m} value={m}>{formatMonth(m)}</SelectItem>)}
             </SelectContent>
           </Select>
+          {categoryFilter && (
+            <button
+              onClick={() => setCategoryFilter(null)}
+              className="h-8 px-3 text-xs inline-flex items-center gap-1.5 rounded-md border border-foreground/30 bg-muted text-foreground"
+            >
+              {categoryFilter}
+              <span className="text-muted-foreground">✕</span>
+            </button>
+          )}
           <button
             onClick={() => setFlaggedOnly((f) => !f)}
             className={`h-8 px-3 text-xs inline-flex items-center gap-1 rounded-md border transition-colors ${
@@ -354,7 +366,14 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
             <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Breakdown</div>
             <div className="space-y-1.5">
               {(showAllCategories ? breakdown : breakdown.slice(0, 5)).map(({ category, amount, pct, barPct }) => (
-                <div key={category} className="flex items-center gap-2">
+                <button
+                  key={category}
+                  type="button"
+                  onClick={() => setCategoryFilter((c) => (c === category ? null : category))}
+                  className={`flex items-center gap-2 w-full text-left rounded-md -mx-1 px-1 py-0.5 transition-colors ${
+                    categoryFilter === category ? "bg-muted" : "hover:bg-muted/50"
+                  }`}
+                >
                   <CategoryBadge category={category} small />
                   <span className="text-xs text-foreground w-24 md:w-32 truncate">{category}</span>
                   <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
@@ -362,7 +381,7 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
                   </div>
                   <span className="text-xs tabular-nums text-muted-foreground w-9 text-right">{pct.toFixed(0)}%</span>
                   <span className="text-xs font-medium tabular-nums text-foreground w-14 text-right">${amount.toFixed(0)}</span>
-                </div>
+                </button>
               ))}
             </div>
             {breakdown.length > 5 && (
