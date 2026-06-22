@@ -346,7 +346,7 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto overscroll-contain">
 
         {/* ── Category breakdown ── */}
         {breakdown.length > 0 && (
