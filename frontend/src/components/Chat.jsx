@@ -120,8 +120,10 @@ export default function Chat({ onExpenseChange, className = "", token, username,
     );
   };
 
+  const isTouchDevice = typeof window !== "undefined" && navigator.maxTouchPoints > 0;
+
   const onKeyDown = (e) => {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
+    if (e.key === "Enter" && !e.shiftKey && !isTouchDevice) { e.preventDefault(); send(); }
   };
 
   const clearChat = () => {
@@ -168,7 +170,7 @@ export default function Chat({ onExpenseChange, className = "", token, username,
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
+      <div className="flex-1 overflow-y-auto overscroll-contain p-4 flex flex-col gap-3">
         {messages.map((m, i) => (
           <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
             <div className={`max-w-[85%] px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed ${
