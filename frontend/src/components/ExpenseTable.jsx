@@ -1,9 +1,35 @@
 import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
+import {
+  Car, Home, Package, Plane, UtensilsCrossed, Coffee, ShoppingCart, Sofa,
+  Film, SprayCan, HeartPulse, Shirt, Phone, Bus, Fuel, Sparkles, Zap, Repeat,
+} from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+
+const CATEGORY_ICONS = {
+  "Driving": Car,
+  "Rent": Home,
+  "Settling Down": Package,
+  "Travel": Plane,
+  "Dining": UtensilsCrossed,
+  "Drinks": Coffee,
+  "Groceries": ShoppingCart,
+  "Furniture": Sofa,
+  "Entertainment": Film,
+  "Household": SprayCan,
+  "Health": HeartPulse,
+  "Clothing": Shirt,
+  "Telecom": Phone,
+  "Transport": Bus,
+  "Gas": Fuel,
+  "Beauty": Sparkles,
+  "Hydro": Zap,
+  "Subscription": Repeat,
+};
 
 const CATEGORY_COLORS = {
   "Dining":        "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400",
@@ -42,13 +68,21 @@ const formatMonth = (ym) => {
   return new Date(year, month - 1).toLocaleString("default", { month: "long", year: "numeric" });
 };
 
-const CategoryBadge = ({ category, small = false }) => (
-  <span className={`inline-flex items-center rounded font-medium ${
-    small ? "px-1.5 py-0.5 text-xs" : "px-2 py-0.5 text-xs rounded-md"
-  } ${CATEGORY_COLORS[category] ?? "bg-muted text-muted-foreground"}`}>
-    {category}
-  </span>
-);
+const CategoryBadge = ({ category, small = false }) => {
+  const Icon = CATEGORY_ICONS[category];
+  return (
+    <span
+      title={category}
+      className={`inline-flex items-center rounded font-medium ${
+        small ? "p-1.5" : "gap-1 px-2 py-0.5 text-xs rounded-md"
+      } ${CATEGORY_COLORS[category] ?? "bg-muted text-muted-foreground"}`}
+    >
+      {Icon && <Icon className={small ? "size-3.5" : "size-3"} />}
+      {!small && category}
+      {small && <span className="sr-only">{category}</span>}
+    </span>
+  );
+};
 
 export default function ExpenseTable({ expenses, className = "", token, onExpenseChange, onUnauthorized }) {
   const authFetch = (url, opts = {}) => {
@@ -62,30 +96,46 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
   const [editingExpense, setEditingExpense] = useState(null);
   const [editValues, setEditValues] = useState({});
   const [categories, setCategories] = useState([]);
+  const [overrides, setOverrides] = useState({});
+  const [deletedIds, setDeletedIds] = useState(() => new Set());
 
   useEffect(() => {
     fetch("/categories").then((r) => r.json()).then(setCategories);
   }, []);
 
+  const items = useMemo(() => {
+    return expenses
+      .filter((e) => !deletedIds.has(e.id))
+      .map((e) => (overrides[e.id] ? { ...e, ...overrides[e.id] } : e));
+  }, [expenses, overrides, deletedIds]);
+
   const months = useMemo(() => {
     const seen = new Set();
-    expenses.forEach((e) => seen.add(e.date.slice(0, 7)));
+    items.forEach((e) => seen.add(e.date.slice(0, 7)));
     return Array.from(seen).sort().reverse();
-  }, [expenses]);
+  }, [items]);
 
-  const filtered = expenses
+  const filtered = items
     .filter((e) => selectedMonth === "all" || e.date.startsWith(selectedMonth))
     .filter((e) => !flaggedOnly || e.flagged);
   const total = filtered.reduce((sum, e) => sum + e.amount, 0);
 
   const toggleFlag = async (e, ev) => {
     ev.stopPropagation();
-    await authFetch(`/expenses/${e.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ flagged: !e.flagged }),
-    });
-    onExpenseChange();
+    const flagged = !e.flagged;
+    setOverrides((prev) => ({ ...prev, [e.id]: { ...prev[e.id], flagged } }));
+    try {
+      const res = await authFetch(`/expenses/${e.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ flagged }),
+      });
+      if (!res.ok) throw new Error();
+      onExpenseChange();
+    } catch {
+      setOverrides((prev) => ({ ...prev, [e.id]: { ...prev[e.id], flagged: e.flagged } }));
+      toast.error("Failed to update flag");
+    }
   };
 
   const openEdit = (e) => {
@@ -94,19 +144,45 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
   };
 
   const saveEdit = async () => {
-    await authFetch(`/expenses/${editingExpense.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(editValues),
-    });
+    const id = editingExpense.id;
+    const original = items.find((x) => x.id === id);
+    setOverrides((prev) => ({ ...prev, [id]: { ...prev[id], ...editValues } }));
     setEditingExpense(null);
-    onExpenseChange();
+    try {
+      const res = await authFetch(`/expenses/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editValues),
+      });
+      if (!res.ok) throw new Error();
+      toast.success("Expense updated");
+      onExpenseChange();
+    } catch {
+      setOverrides((prev) => ({ ...prev, [id]: { ...prev[id], ...original } }));
+      toast.error("Failed to update expense");
+    }
   };
 
-  const deleteExpense = async () => {
-    await authFetch(`/expenses/${editingExpense.id}`, { method: "DELETE" });
+  const deleteExpenseById = async (id) => {
+    setDeletedIds((prev) => new Set(prev).add(id));
+    try {
+      const res = await authFetch(`/expenses/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error();
+      toast.success("Expense deleted");
+      onExpenseChange();
+    } catch {
+      setDeletedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+      toast.error("Failed to delete expense");
+    }
+  };
+
+  const deleteExpense = () => {
+    deleteExpenseById(editingExpense.id);
     setEditingExpense(null);
-    onExpenseChange();
   };
 
   const exportCSV = async () => {
@@ -306,7 +382,7 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
                 <td className="py-3 px-1">
                   <button
                     className="opacity-0 group-hover:opacity-100 w-9 h-9 flex items-center justify-center rounded-md text-sm text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all"
-                    onClick={async (ev) => { ev.stopPropagation(); await authFetch(`/expenses/${e.id}`, { method: "DELETE" }); onExpenseChange(); }}
+                    onClick={(ev) => { ev.stopPropagation(); deleteExpenseById(e.id); }}
                   >✕</button>
                 </td>
               </tr>

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import Chat from "./components/Chat";
 import ExpenseTable from "./components/ExpenseTable";
 import Login from "./components/Login";
+import { Toaster } from "./components/ui/sonner";
 
 export default function App() {
   const [token, setToken] = useState(() => localStorage.getItem("token"));
@@ -40,7 +41,7 @@ export default function App() {
     if (token) fetchExpenses();
   }, [token]);
 
-  if (!token) return <Login onLogin={handleLogin} />;
+  if (!token) return <><Login onLogin={handleLogin} /><Toaster theme={dark ? "dark" : "light"} /></>;
 
   const tabClass = (tab) =>
     `flex-1 py-3 text-sm font-medium border-b-2 transition-colors ${
@@ -80,6 +81,7 @@ export default function App() {
         </div>
 
       </div>
+      <Toaster theme={dark ? "dark" : "light"} />
     </div>
   );
 }
