@@ -52,6 +52,27 @@ const CATEGORY_COLORS = {
   "Settling Down": "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-400",
 };
 
+const CATEGORY_BAR_COLORS = {
+  "Dining":        "bg-green-500",
+  "Drinks":        "bg-purple-500",
+  "Groceries":     "bg-emerald-500",
+  "Transport":     "bg-blue-500",
+  "Driving":       "bg-sky-500",
+  "Gas":           "bg-cyan-500",
+  "Travel":        "bg-teal-500",
+  "Clothing":      "bg-violet-500",
+  "Beauty":        "bg-pink-500",
+  "Entertainment": "bg-orange-500",
+  "Subscription":  "bg-amber-500",
+  "Health":        "bg-red-500",
+  "Household":     "bg-yellow-500",
+  "Furniture":     "bg-lime-500",
+  "Rent":          "bg-zinc-500",
+  "Hydro":         "bg-slate-500",
+  "Telecom":       "bg-gray-500",
+  "Settling Down": "bg-indigo-500",
+};
+
 const formatDate = (d) =>
   new Date(d + "T00:00:00").toLocaleDateString("default", { month: "short", day: "numeric" });
 
@@ -119,6 +140,18 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
     .filter((e) => selectedMonth === "all" || e.date.startsWith(selectedMonth))
     .filter((e) => !flaggedOnly || e.flagged);
   const total = filtered.reduce((sum, e) => sum + e.amount, 0);
+
+  const categoryTotals = {};
+  filtered.forEach((e) => { categoryTotals[e.category] = (categoryTotals[e.category] || 0) + e.amount; });
+  const maxCategoryTotal = Math.max(0, ...Object.values(categoryTotals));
+  const breakdown = Object.entries(categoryTotals)
+    .map(([category, amount]) => ({
+      category,
+      amount,
+      pct: total ? (amount / total) * 100 : 0,
+      barPct: maxCategoryTotal ? (amount / maxCategoryTotal) * 100 : 0,
+    }))
+    .sort((a, b) => b.amount - a.amount);
 
   const toggleFlag = async (e, ev) => {
     ev.stopPropagation();
@@ -313,6 +346,26 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
       </div>
 
       <div className="flex-1 overflow-y-auto">
+
+        {/* ── Category breakdown ── */}
+        {breakdown.length > 0 && (
+          <div className="px-4 py-3 md:px-5 border-b border-border/50">
+            <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Breakdown</div>
+            <div className="space-y-1.5">
+              {breakdown.map(({ category, amount, pct, barPct }) => (
+                <div key={category} className="flex items-center gap-2">
+                  <CategoryBadge category={category} small />
+                  <span className="text-xs text-foreground w-24 md:w-32 truncate">{category}</span>
+                  <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
+                    <div className={`h-full rounded-full ${CATEGORY_BAR_COLORS[category] ?? "bg-foreground/40"}`} style={{ width: `${barPct}%` }} />
+                  </div>
+                  <span className="text-xs tabular-nums text-muted-foreground w-9 text-right">{pct.toFixed(0)}%</span>
+                  <span className="text-xs font-medium tabular-nums text-foreground w-14 text-right">${amount.toFixed(0)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* ── Mobile card list ── */}
         <div className="md:hidden">
