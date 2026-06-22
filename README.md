@@ -19,6 +19,20 @@ A personal expense tracker powered by an AI agent. Describe expenses in plain En
 
 ---
 
+## Roadmap
+
+Coming features, in priority order (each builds on the one before it):
+
+| # | Feature | Why |
+|---|---|---|
+| 1 | Vendor memory | Stop re-asking for category on repeat vendors — check past expenses for similar descriptions first |
+| 2 | Duplicate detection | Catch re-logged expenses before bulk imports make it a real problem |
+| 3 | Photo → auto-log | Snap a receipt or bank app transaction screenshot, agent extracts and logs the line items |
+| 4 | Email forwarding | Forward order/receipt emails to a dedicated inbox, agent extracts and logs automatically |
+| 5 | Family group chat bot | Log expenses from wherever the family already chats (WhatsApp/Telegram), not just the web app |
+
+---
+
 ## Stack
 
 | Layer | Choice |
