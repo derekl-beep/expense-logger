@@ -4,7 +4,7 @@ A personal expense tracker powered by an AI agent. Describe expenses in plain En
 
 > Built as a side project to explore how agentic AI changes application development.
 
-![Expense Logger demo](https://github.com/user-attachments/assets/b0149768-1d47-4b18-a4ce-b4a74ba98cdb)
+![Expense Logger demo](https://github.com/user-attachments/assets/dd6ee1e7-2fbb-45a2-a7c7-c949de5ea356)
 
 ---
 
