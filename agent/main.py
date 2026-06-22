@@ -53,6 +53,7 @@ def _run_tools(response_content: list, user_id: int) -> list:
             if block.name == "save_expense":
                 kwargs["user_id"] = user_id
             result = TOOL_HANDLERS[block.name](**kwargs)
+            print(f"[tool] {block.name}({kwargs}) -> {result}")
             tool_results.append({
                 "type": "tool_result",
                 "tool_use_id": block.id,
