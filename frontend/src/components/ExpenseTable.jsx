@@ -245,17 +245,15 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
               <Input value={editValues.description ?? ""} className="h-9 text-base md:text-sm"
                 onChange={(e) => setEditValues({ ...editValues, description: e.target.value })} />
             </div>
-            <div className="flex gap-2">
-              <div className="flex-1 min-w-0">
-                <label className="text-xs text-muted-foreground mb-1 block">Date</label>
-                <Input type="date" value={editValues.date ?? ""} className="h-9 text-base md:text-sm"
-                  onChange={(e) => setEditValues({ ...editValues, date: e.target.value })} />
-              </div>
-              <div className="w-28">
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Date</label>
+              <Input type="date" value={editValues.date ?? ""} className="h-9 text-base md:text-sm"
+                onChange={(e) => setEditValues({ ...editValues, date: e.target.value })} />
+            </div>
+            <div>
+              <div className="flex items-baseline justify-between">
                 <label className="text-xs text-muted-foreground mb-1 block">Amount</label>
-                <Input type="number" inputMode="decimal" step="0.01" value={editValues.amount ?? ""} className="h-9 text-base md:text-sm text-right"
-                  onChange={(e) => setEditValues({ ...editValues, amount: parseFloat(e.target.value) })} />
-                <div className="flex gap-1 mt-1.5 justify-end">
+                <div className="flex gap-1">
                   {[2, 3, 4].map((n) => (
                     <button
                       key={n}
@@ -272,6 +270,8 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
                   ))}
                 </div>
               </div>
+              <Input type="number" inputMode="decimal" step="0.01" value={editValues.amount ?? ""} className="h-9 text-base md:text-sm"
+                onChange={(e) => setEditValues({ ...editValues, amount: parseFloat(e.target.value) })} />
             </div>
             <div>
               <label className="text-xs text-muted-foreground mb-1 block">Category</label>
