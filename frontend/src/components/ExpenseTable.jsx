@@ -119,6 +119,7 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
   const [categories, setCategories] = useState([]);
   const [overrides, setOverrides] = useState({});
   const [deletedIds, setDeletedIds] = useState(() => new Set());
+  const [showAllCategories, setShowAllCategories] = useState(false);
 
   useEffect(() => {
     fetch("/categories").then((r) => r.json()).then(setCategories);
@@ -352,7 +353,7 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
           <div className="px-4 py-3 md:px-5 border-b border-border/50">
             <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Breakdown</div>
             <div className="space-y-1.5">
-              {breakdown.map(({ category, amount, pct, barPct }) => (
+              {(showAllCategories ? breakdown : breakdown.slice(0, 5)).map(({ category, amount, pct, barPct }) => (
                 <div key={category} className="flex items-center gap-2">
                   <CategoryBadge category={category} small />
                   <span className="text-xs text-foreground w-24 md:w-32 truncate">{category}</span>
@@ -364,6 +365,14 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
                 </div>
               ))}
             </div>
+            {breakdown.length > 5 && (
+              <button
+                onClick={() => setShowAllCategories((v) => !v)}
+                className="text-xs text-muted-foreground hover:text-foreground mt-2 transition-colors"
+              >
+                {showAllCategories ? "View less" : `View ${breakdown.length - 5} more`}
+              </button>
+            )}
           </div>
         )}
 
