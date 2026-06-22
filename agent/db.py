@@ -101,11 +101,28 @@ def create_user(username: str, password_hash: str) -> None:
 def save_expense(amount: float, category: str, description: str, date: str, user_id: int = None) -> dict:
     if description:
         description = description[0].upper() + description[1:]
+
+    dup_cur = _run(
+        """
+        SELECT id FROM expenses
+        WHERE user_id = %s AND date = %s AND amount = %s AND similarity(description, %s) > 0.4
+        ORDER BY similarity(description, %s) DESC
+        LIMIT 1
+        """,
+        (user_id, date, amount, description, description),
+    )
+    duplicate = dup_cur.fetchone()
+
     cur = _run(
-        "INSERT INTO expenses (amount, category, description, date, user_id) VALUES (%s, %s, %s, %s, %s) RETURNING id",
-        (amount, category, description, date, user_id),
+        "INSERT INTO expenses (amount, category, description, date, user_id, flagged) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
+        (amount, category, description, date, user_id, duplicate is not None),
     )
     row = cur.fetchone()
+
+    if duplicate:
+        _run("UPDATE expenses SET flagged = TRUE WHERE id = %s", (duplicate["id"],))
+        return {"status": "saved", "id": row["id"], "possible_duplicate_of": duplicate["id"]}
+
     return {"status": "saved", "id": row["id"]}
 
 
