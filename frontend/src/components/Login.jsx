@@ -35,27 +35,38 @@ export default function Login({ onLogin }) {
   };
 
   return (
-    <div className="h-screen flex items-center justify-center bg-background">
-      <div className="w-full max-w-sm px-8 space-y-6">
-        <div>
+    <div className="h-dvh flex items-center justify-center bg-muted/40 dark:bg-background px-4">
+      <div className="w-full max-w-sm rounded-xl border border-border bg-card p-8 shadow-sm space-y-6">
+        <div className="flex flex-col items-center text-center">
+          <div className="w-11 h-11 rounded-lg bg-primary text-primary-foreground flex items-center justify-center text-lg font-semibold mb-3">
+            $
+          </div>
           <h1 className="text-xl font-semibold text-foreground">Expense Logger</h1>
           <p className="text-sm text-muted-foreground mt-1">Sign in to continue</p>
         </div>
-        <form onSubmit={submit} className="space-y-3">
-          <Input
-            placeholder="Username"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            disabled={loading}
-            autoFocus
-          />
-          <Input
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            disabled={loading}
-          />
+        <form onSubmit={submit} className="space-y-4">
+          <div className="space-y-3">
+            <div>
+              <label htmlFor="username" className="text-xs text-muted-foreground mb-1 block">Username</label>
+              <Input
+                id="username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                disabled={loading}
+                autoFocus
+              />
+            </div>
+            <div>
+              <label htmlFor="password" className="text-xs text-muted-foreground mb-1 block">Password</label>
+              <Input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                disabled={loading}
+              />
+            </div>
+          </div>
           <div className="flex items-center gap-2">
             <input
               id="remember"
@@ -69,7 +80,7 @@ export default function Login({ onLogin }) {
               Remember me for 30 days
             </label>
           </div>
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          {error && <p className="text-sm text-destructive bg-destructive/10 rounded-md px-3 py-2">{error}</p>}
           <Button type="submit" className="w-full" disabled={loading || !username || !password}>
             {loading ? "Signing in…" : "Sign in"}
           </Button>
