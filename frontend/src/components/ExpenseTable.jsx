@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   Car, Home, Package, Plane, UtensilsCrossed, Coffee, ShoppingCart, Sofa,
@@ -105,7 +105,15 @@ const CategoryBadge = ({ category, small = false }) => {
   );
 };
 
-export default function ExpenseTable({ expenses, className = "", token, onExpenseChange, onUnauthorized }) {
+const ExpenseSkeleton = () => (
+  <div className="px-4 py-3 space-y-3">
+    {[0, 1, 2, 3, 4].map((i) => (
+      <div key={i} className="h-12 rounded-md bg-muted animate-pulse" />
+    ))}
+  </div>
+);
+
+export default function ExpenseTable({ expenses, className = "", token, onExpenseChange, onUnauthorized, loading = false }) {
   const authFetch = (url, opts = {}) => {
     const res = fetch(url, { ...opts, headers: { ...opts.headers, Authorization: `Bearer ${token}` } });
     res.then((r) => { if (r.status === 401) onUnauthorized(); });
@@ -121,6 +129,8 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
   const [deletedIds, setDeletedIds] = useState(() => new Set());
   const [showAllCategories, setShowAllCategories] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const pendingDeletes = useRef({});
 
   useEffect(() => {
     fetch("/categories").then((r) => r.json()).then(setCategories);
@@ -143,8 +153,11 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
   const monthFlagFiltered = items
     .filter((e) => selectedMonth === "all" || e.date.startsWith(selectedMonth))
     .filter((e) => !flaggedOnly || e.flagged);
-  const filtered = monthFlagFiltered.filter((e) => !categoryFilter || e.category === categoryFilter);
+  const filtered = monthFlagFiltered
+    .filter((e) => !categoryFilter || e.category === categoryFilter)
+    .filter((e) => !searchQuery || e.description.toLowerCase().includes(searchQuery.trim().toLowerCase()));
   const total = filtered.reduce((sum, e) => sum + e.amount, 0);
+  const emptyMessage = items.length === 0 ? "No expenses yet" : "No expenses match your filters";
 
   const categoryTotals = {};
   monthFlagFiltered.forEach((e) => { categoryTotals[e.category] = (categoryTotals[e.category] || 0) + e.amount; });
@@ -202,21 +215,40 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
     }
   };
 
-  const deleteExpenseById = async (id) => {
+  const restoreDeleted = (id) => {
+    clearTimeout(pendingDeletes.current[id]);
+    delete pendingDeletes.current[id];
+    setDeletedIds((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  };
+
+  const deleteExpenseById = (id) => {
     setDeletedIds((prev) => new Set(prev).add(id));
-    try {
-      const res = await authFetch(`/expenses/${id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error();
-      toast.success("Expense deleted");
-      onExpenseChange();
-    } catch {
-      setDeletedIds((prev) => {
-        const next = new Set(prev);
-        next.delete(id);
-        return next;
-      });
-      toast.error("Failed to delete expense");
-    }
+
+    const toastId = toast("Expense deleted", {
+      action: { label: "Undo", onClick: () => restoreDeleted(id) },
+      duration: 5000,
+    });
+
+    pendingDeletes.current[id] = setTimeout(async () => {
+      delete pendingDeletes.current[id];
+      try {
+        const res = await authFetch(`/expenses/${id}`, { method: "DELETE" });
+        if (!res.ok) throw new Error();
+        onExpenseChange();
+      } catch {
+        setDeletedIds((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+        toast.dismiss(toastId);
+        toast.error("Failed to delete expense");
+      }
+    }, 5000);
   };
 
   const deleteExpense = () => {
@@ -360,6 +392,16 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
         </div>
       </div>
 
+      {/* Search */}
+      <div className="px-4 py-2 md:px-5 border-b border-border shrink-0">
+        <Input
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Search description…"
+          className="h-8 text-sm"
+        />
+      </div>
+
       <div className="flex-1 overflow-y-auto overscroll-contain">
 
         {/* ── Category breakdown ── */}
@@ -399,8 +441,10 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
 
         {/* ── Mobile card list ── */}
         <div className="md:hidden">
-          {filtered.length === 0 ? (
-            <p className="text-center py-16 text-muted-foreground text-sm">No expenses yet</p>
+          {loading ? (
+            <ExpenseSkeleton />
+          ) : filtered.length === 0 ? (
+            <p className="text-center py-16 text-muted-foreground text-sm">{emptyMessage}</p>
           ) : filtered.reduce((groups, e) => {
             const last = groups[groups.length - 1];
             if (!last || last.date !== e.date) groups.push({ date: e.date, items: [e] });
@@ -441,8 +485,10 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
             </tr>
           </thead>
           <tbody>
-            {filtered.length === 0 ? (
-              <tr><td colSpan={6} className="text-center py-16 text-muted-foreground text-sm">No expenses yet</td></tr>
+            {loading ? (
+              <tr><td colSpan={6}><ExpenseSkeleton /></td></tr>
+            ) : filtered.length === 0 ? (
+              <tr><td colSpan={6} className="text-center py-16 text-muted-foreground text-sm">{emptyMessage}</td></tr>
             ) : filtered.map((e) => (
               <tr key={e.id}
                 className="border-b border-border/50 hover:bg-muted/50 cursor-pointer group transition-colors"
