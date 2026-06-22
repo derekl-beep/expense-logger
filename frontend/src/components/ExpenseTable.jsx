@@ -406,7 +406,7 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
 
         {/* ── Category breakdown ── */}
         {breakdown.length > 0 && (
-          <div className="px-4 py-3 md:px-5 border-b border-border/50">
+          <div className={`px-4 py-3 md:px-5 border-b border-border/50 ${searchQuery ? "hidden md:block" : ""}`}>
             <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Breakdown</div>
             <div className="space-y-1.5">
               {(showAllCategories ? breakdown : breakdown.slice(0, 5)).map(({ category, amount, pct, barPct }) => (
