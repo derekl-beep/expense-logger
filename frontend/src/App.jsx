@@ -8,6 +8,7 @@ export default function App() {
   const [token, setToken] = useState(() => localStorage.getItem("token"));
   const [username, setUsername] = useState(() => localStorage.getItem("username") || "");
   const [expenses, setExpenses] = useState([]);
+  const [expensesLoading, setExpensesLoading] = useState(true);
   const [activeTab, setActiveTab] = useState(() => localStorage.getItem("activeTab") || "chat");
   const [dark, setDark] = useState(() => localStorage.getItem("theme") === "dark");
 
@@ -40,6 +41,7 @@ export default function App() {
     });
     if (res.status === 401) { handleLogout(); return; }
     setExpenses(await res.json());
+    setExpensesLoading(false);
   };
 
   useEffect(() => {
@@ -82,6 +84,7 @@ export default function App() {
             token={token}
             onExpenseChange={fetchExpenses}
             onUnauthorized={handleLogout}
+            loading={expensesLoading}
           />
         </div>
 
