@@ -42,6 +42,8 @@ def _row(r: dict) -> dict:
 
 
 # Schema — idempotent, runs on every startup
+_run("CREATE EXTENSION IF NOT EXISTS pg_trgm")
+
 _run("""
     CREATE TABLE IF NOT EXISTS users (
         id            SERIAL PRIMARY KEY,
@@ -66,6 +68,8 @@ _run("""
 
 _run("ALTER TABLE expenses ADD COLUMN IF NOT EXISTS flagged BOOLEAN DEFAULT FALSE")
 _run("ALTER TABLE expenses ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id)")
+
+_run("CREATE INDEX IF NOT EXISTS expenses_description_trgm_idx ON expenses USING gin (description gin_trgm_ops)")
 
 _run("""
     CREATE TABLE IF NOT EXISTS api_calls (
@@ -103,6 +107,21 @@ def save_expense(amount: float, category: str, description: str, date: str, user
     )
     row = cur.fetchone()
     return {"status": "saved", "id": row["id"]}
+
+
+def find_similar_expenses(description: str, limit: int = 3) -> list[dict]:
+    """Fuzzy-match past expense descriptions via trigram similarity, for vendor category recall."""
+    cur = _run(
+        """
+        SELECT description, category, similarity(description, %s) AS score
+        FROM expenses
+        WHERE similarity(description, %s) > 0.3
+        ORDER BY score DESC
+        LIMIT %s
+        """,
+        (description, description, limit),
+    )
+    return [{"description": r["description"], "category": r["category"], "score": float(r["score"])} for r in cur.fetchall()]
 
 
 def get_expenses(start_date: str = None, end_date: str = None, category: str = None, logged_by: str = None) -> list[dict]:

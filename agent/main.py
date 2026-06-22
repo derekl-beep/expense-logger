@@ -21,6 +21,9 @@ Write descriptions as concise noun phrases in title case (capitalize all words e
 When a bare weekday name is given (e.g. "Friday", "Fri"), always assume the most recent past occurrence — never ask for clarification.
 After saving, confirm with a short, friendly message (one line per expense is fine).
 
+### Choosing a category
+For every expense, call find_similar_expense with its description (or vendor name) before deciding on a category — do this even if you're already confident what the category should be, since the user may have categorized this vendor differently than you'd assume. If it returns a match with a high score (roughly 0.35+), reuse that match's category directly. If it returns nothing useful, fall back to your own knowledge of the vendor (e.g. you know "Tims" means Tim Hortons, a coffee shop) to pick the best category. Only ask the user if you genuinely cannot infer a category either way.
+
 ## Querying expenses
 When the user asks about spending, call get_expenses with appropriate filters.
 Use logged_by to filter by who logged the expense (e.g. "derek" or "kelly").
@@ -50,6 +53,7 @@ def _run_tools(response_content: list, user_id: int) -> list:
             if block.name == "save_expense":
                 kwargs["user_id"] = user_id
             result = TOOL_HANDLERS[block.name](**kwargs)
+            print(f"[tool] {block.name}({kwargs}) -> {result}")
             tool_results.append({
                 "type": "tool_result",
                 "tool_use_id": block.id,
