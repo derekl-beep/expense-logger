@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   Car, Home, Package, Plane, UtensilsCrossed, Coffee, ShoppingCart, Sofa,
-  Film, SprayCan, HeartPulse, Shirt, Phone, Bus, Fuel, Sparkles, Zap, Repeat,
+  Film, SprayCan, HeartPulse, Shirt, Phone, Bus, Fuel, Sparkles, Zap, Repeat, X,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -393,13 +393,22 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
       </div>
 
       {/* Search */}
-      <div className="px-4 py-2 md:px-5 border-b border-border shrink-0">
+      <div className="px-4 py-2 md:px-5 border-b border-border shrink-0 relative">
         <Input
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           placeholder="Search description…"
-          className="h-8 text-sm"
+          className="h-8 text-sm pr-7"
         />
+        {searchQuery && (
+          <button
+            type="button"
+            onClick={() => setSearchQuery("")}
+            className="absolute right-6 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto overscroll-contain">

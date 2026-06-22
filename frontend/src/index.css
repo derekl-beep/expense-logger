@@ -125,3 +125,12 @@ html, body {
   display: flex;
   flex-direction: column;
 }
+
+/* iOS Safari zooms the page on focus if a form field's font-size is below
+   16px. !important guarantees this holds even if a component's Tailwind
+   text-size classes (e.g. a stray text-sm) would otherwise win the cascade. */
+@media (max-width: 767.98px) {
+  input, textarea, select {
+    font-size: 16px !important;
+  }
+}
