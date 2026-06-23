@@ -30,7 +30,9 @@ function loadMessages() {
 function saveMessages(msgs) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(msgs));
-  } catch {}
+  } catch {
+    // localStorage unavailable (e.g. private browsing) — drop silently
+  }
 }
 
 export default function Chat({ onExpenseChange, className = "", token, username, onLogout, dark, onToggleDark }) {
@@ -147,7 +149,9 @@ export default function Chat({ onExpenseChange, className = "", token, username,
               return updated;
             });
           }
-        } catch {}
+        } catch {
+          // incomplete SSE chunk — wait for the rest to arrive
+        }
       }
     }
     setLoading(false);
