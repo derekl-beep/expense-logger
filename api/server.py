@@ -69,10 +69,14 @@ def login(req: LoginRequest):
     return {"token": create_token(user["id"], req.remember), "username": user["username"]}
 
 
+class ImageInput(BaseModel):
+    data: str
+    media_type: str
+
+
 class ChatRequest(BaseModel):
     message: str
-    image_data: str | None = None
-    image_media_type: str | None = None
+    images: list[ImageInput] | None = None
 
 
 def _get_username(user_id: int) -> str:
@@ -80,9 +84,13 @@ def _get_username(user_id: int) -> str:
     return user["username"] if user else "user"
 
 
+def _images_payload(req: ChatRequest) -> list[dict] | None:
+    return [img.model_dump() for img in req.images] if req.images else None
+
+
 @app.post("/chat")
 def chat_endpoint(req: ChatRequest, user_id: int = Depends(check_rate_limit)):
-    response = chat(req.message, user_id, _get_username(user_id), req.image_data, req.image_media_type)
+    response = chat(req.message, user_id, _get_username(user_id), _images_payload(req))
     return {"response": response}
 
 
@@ -92,7 +100,7 @@ def chat_stream_endpoint(req: ChatRequest, user_id: int = Depends(check_rate_lim
 
     def generate():
         try:
-            for chunk in stream_chat(req.message, user_id, username, req.image_data, req.image_media_type):
+            for chunk in stream_chat(req.message, user_id, username, _images_payload(req)):
                 yield f"data: {json.dumps({'text': chunk})}\n\n"
         except Exception:
             logger.error("stream_chat error:\n%s", traceback.format_exc())

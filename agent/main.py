@@ -37,7 +37,8 @@ If the user refers to "the last one", "that expense", or similar, call get_expen
 Flagging marks an expense for follow-up (flagged=true). Unflagging clears it (flagged=false).
 
 ## Receipt / screenshot scanning
-When the user's message contains extracted text from an image (prefixed with "[Extracted text from image:]"), parse it for expense line items. Read dates and amounts exactly as shown — do not approximate. For category, use your best judgement. Call save_expense for each item.
+When the user's message contains extracted text from one or more images (prefixed with "[Extracted text from image...]"), parse each block for expense line items. Read dates and amounts exactly as shown — do not approximate. For category, use your best judgement.
+When multiple images are attached, the same transaction can appear in more than one block — this happens when someone screenshots overlapping date ranges of the same account. Before calling save_expense, compare line items across all the blocks in this message; if two entries share the same date, amount, and description, treat them as the same transaction and save it only once.
 
 ## Deleting
 To delete, first call get_expenses to find the ID, then call delete_expense.
@@ -50,6 +51,9 @@ _sessions: dict[str, list] = {}
 HISTORY_LIMIT = 30  # max raw messages passed to the API per turn
 MODEL_DEFAULT = "claude-haiku-4-5-20251001"
 MODEL_VISION = "claude-sonnet-4-6"  # better accuracy for reading text in images
+
+
+MAX_IMAGES = 6
 
 
 def _ocr_image(image_data: str, image_media_type: str) -> str:
@@ -65,6 +69,19 @@ def _ocr_image(image_data: str, image_media_type: str) -> str:
         }],
     )
     return response.content[0].text
+
+
+def _build_user_content(user_input: str, images: list[dict] | None) -> str:
+    if not images:
+        return user_input
+    images = images[:MAX_IMAGES]
+    parts = [user_input]
+    multiple = len(images) > 1
+    for i, img in enumerate(images, 1):
+        ocr_text = _ocr_image(img["data"], img["media_type"])
+        label = f"[Extracted text from image {i} of {len(images)}:]" if multiple else "[Extracted text from image:]"
+        parts.append(f"{label}\n{ocr_text}")
+    return "\n\n".join(parts)
 
 
 def _run_tools(response_content: list, user_id: int) -> list:
@@ -84,13 +101,9 @@ def _run_tools(response_content: list, user_id: int) -> list:
     return tool_results
 
 
-def chat(user_input: str, user_id: int, username: str = "user", image_data: str = None, image_media_type: str = None) -> str:
+def chat(user_input: str, user_id: int, username: str = "user", images: list[dict] | None = None) -> str:
     messages = _sessions.setdefault(str(user_id), [])
-    if image_data:
-        ocr_text = _ocr_image(image_data, image_media_type)
-        content = f"{user_input}\n\n[Extracted text from image:]\n{ocr_text}"
-    else:
-        content = user_input
+    content = _build_user_content(user_input, images)
     messages.append({"role": "user", "content": content})
 
     while True:
@@ -114,13 +127,9 @@ def chat(user_input: str, user_id: int, username: str = "user", image_data: str 
             messages.append({"role": "user", "content": tool_results})
 
 
-def stream_chat(user_input: str, user_id: int, username: str = "user", image_data: str = None, image_media_type: str = None):
+def stream_chat(user_input: str, user_id: int, username: str = "user", images: list[dict] | None = None):
     messages = _sessions.setdefault(str(user_id), [])
-    if image_data:
-        ocr_text = _ocr_image(image_data, image_media_type)
-        content = f"{user_input}\n\n[Extracted text from image:]\n{ocr_text}"
-    else:
-        content = user_input
+    content = _build_user_content(user_input, images)
     messages.append({"role": "user", "content": content})
 
     while True:
