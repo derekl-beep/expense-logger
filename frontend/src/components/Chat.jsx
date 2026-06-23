@@ -36,7 +36,9 @@ export default function Chat({ onExpenseChange, className = "", token, username,
   const [messages, setMessages] = useState(loadMessages);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [image, setImage] = useState(null); // { data, mediaType, previewUrl }
   const bottomRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -46,9 +48,32 @@ export default function Chat({ onExpenseChange, className = "", token, username,
     saveMessages(messages);
   }, [messages]);
 
+  const handleFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result;
+      const base64 = dataUrl.split(",")[1];
+      setImage({ data: base64, mediaType: file.type, previewUrl: dataUrl });
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  };
+
   const sendMessage = async (text, displayText = null) => {
     if (!text || loading) return;
-    setMessages((prev) => [...prev, { role: "user", text: displayText ?? text, ts: Date.now() }]);
+    const attachedImage = image;
+    setImage(null);
+    setMessages((prev) => [
+      ...prev,
+      {
+        role: "user",
+        text: displayText ?? text,
+        imagePreview: attachedImage?.previewUrl ?? null,
+        ts: Date.now(),
+      },
+    ]);
     setLoading(true);
 
     const res = await fetch("/chat/stream", {
@@ -57,7 +82,11 @@ export default function Chat({ onExpenseChange, className = "", token, username,
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ message: text }),
+      body: JSON.stringify({
+        message: text,
+        image_data: attachedImage?.data ?? null,
+        image_media_type: attachedImage?.mediaType ?? null,
+      }),
     });
 
     if (res.status === 401) { onLogout(); return; }
@@ -103,7 +132,7 @@ export default function Chat({ onExpenseChange, className = "", token, username,
   };
 
   const send = () => {
-    const text = input.trim();
+    const text = input.trim() || (image ? "Please log the expenses from this image." : "");
     if (!text) return;
     setInput("");
     sendMessage(text);
@@ -119,6 +148,15 @@ export default function Chat({ onExpenseChange, className = "", token, username,
       `Summarize ${month} ${year}`
     );
   };
+
+  const [lightbox, setLightbox] = useState(null);
+
+  useEffect(() => {
+    if (!lightbox) return;
+    const close = (e) => { if (e.key === "Escape") setLightbox(null); };
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, [lightbox]);
 
   const isTouchDevice = typeof window !== "undefined" && navigator.maxTouchPoints > 0;
 
@@ -180,6 +218,9 @@ export default function Chat({ onExpenseChange, className = "", token, username,
                   ? "bg-destructive/10 text-destructive rounded-bl-sm"
                   : "bg-muted text-foreground rounded-bl-sm"
             }`}>
+              {m.imagePreview && (
+                <img src={m.imagePreview} alt="attached" onClick={() => setLightbox(m.imagePreview)} className="mb-1.5 max-h-40 rounded-lg object-contain cursor-zoom-in" />
+              )}
               {m.role === "agent"
                 ? <div className="prose prose-sm dark:prose-invert max-w-none [&_table]:text-xs [&_th]:py-1 [&_td]:py-1 [&_p]:my-0.5">
                     <Markdown remarkPlugins={[remarkGfm]}>{m.text}</Markdown>
@@ -199,23 +240,59 @@ export default function Chat({ onExpenseChange, className = "", token, username,
       </div>
 
       {/* Input */}
-      <div className="flex items-end gap-2 px-4 pt-3 pb-[max(12px,env(safe-area-inset-bottom))] border-t border-border shrink-0">
-        <textarea
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={onKeyDown}
-          placeholder="e.g. $5 coffee today"
-          disabled={loading}
-          rows={1}
-          className="flex-1 text-base md:text-sm resize-none overflow-hidden rounded-2xl border border-input bg-background px-4 py-2 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50 leading-5"
-          style={{ minHeight: "36px", maxHeight: "120px" }}
-          onInput={(e) => {
-            e.target.style.height = "auto";
-            e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px";
-          }}
-        />
-        <Button onClick={send} disabled={loading} size="sm" className="shrink-0 rounded-2xl px-5">Send</Button>
+      <div className="px-4 pt-3 pb-[max(12px,env(safe-area-inset-bottom))] border-t border-border shrink-0">
+        {image && (
+          <div className="relative inline-block mb-2">
+            <img src={image.previewUrl} alt="preview" className="h-16 rounded-lg object-contain border border-border" />
+            <button
+              onClick={() => setImage(null)}
+              className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-muted text-muted-foreground text-xs flex items-center justify-center leading-none hover:bg-destructive hover:text-destructive-foreground"
+            >×</button>
+          </div>
+        )}
+        <div className="flex items-end gap-2">
+          <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={loading}
+            className="shrink-0 w-9 h-9 flex items-center justify-center rounded-2xl border border-input text-muted-foreground hover:bg-muted transition-colors disabled:opacity-50 text-base"
+            title="Attach image"
+          >📎</button>
+          <textarea
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={onKeyDown}
+            placeholder="e.g. $5 coffee today"
+            disabled={loading}
+            rows={1}
+            className="flex-1 text-base md:text-sm resize-none overflow-hidden rounded-2xl border border-input bg-background px-4 py-2 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50 leading-5"
+            style={{ minHeight: "36px", maxHeight: "120px" }}
+            onInput={(e) => {
+              e.target.style.height = "auto";
+              e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px";
+            }}
+          />
+          <Button onClick={send} disabled={loading || (!input.trim() && !image)} size="sm" className="shrink-0 rounded-2xl px-5">Send</Button>
+        </div>
       </div>
+      {lightbox && (
+        <div
+          onClick={() => setLightbox(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200"
+          style={{ background: "rgba(0,0,0,0.75)", backdropFilter: "blur(6px)" }}
+        >
+          <button
+            onClick={() => setLightbox(null)}
+            className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white text-lg transition-colors"
+          >×</button>
+          <img
+            src={lightbox}
+            alt="full size"
+            onClick={(e) => e.stopPropagation()}
+            className="max-w-full max-h-full rounded-xl object-contain shadow-2xl animate-in zoom-in-95 duration-200"
+          />
+        </div>
+      )}
     </div>
   );
 }

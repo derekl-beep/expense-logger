@@ -36,6 +36,9 @@ For all other edits and flags, call get_expenses to find the right record first,
 If the user refers to "the last one", "that expense", or similar, call get_expenses (no filters, most recent first) to identify it by context.
 Flagging marks an expense for follow-up (flagged=true). Unflagging clears it (flagged=false).
 
+## Receipt / screenshot scanning
+When the user's message contains extracted text from an image (prefixed with "[Extracted text from image:]"), parse it for expense line items. Read dates and amounts exactly as shown — do not approximate. For category, use your best judgement. Call save_expense for each item.
+
 ## Deleting
 To delete, first call get_expenses to find the ID, then call delete_expense.
 
@@ -45,6 +48,23 @@ To delete, first call get_expenses to find the ID, then call delete_expense.
 # Conversation history keyed by user_id.
 _sessions: dict[str, list] = {}
 HISTORY_LIMIT = 30  # max raw messages passed to the API per turn
+MODEL_DEFAULT = "claude-haiku-4-5-20251001"
+MODEL_VISION = "claude-sonnet-4-6"  # better accuracy for reading text in images
+
+
+def _ocr_image(image_data: str, image_media_type: str) -> str:
+    response = client.messages.create(
+        model=MODEL_VISION,
+        max_tokens=1024,
+        messages=[{
+            "role": "user",
+            "content": [
+                {"type": "image", "source": {"type": "base64", "media_type": image_media_type, "data": image_data}},
+                {"type": "text", "text": "Extract all text from this image exactly as it appears. Preserve all numbers, dates, and formatting precisely. Output only the extracted text, nothing else."},
+            ],
+        }],
+    )
+    return response.content[0].text
 
 
 def _run_tools(response_content: list, user_id: int) -> list:
@@ -64,13 +84,18 @@ def _run_tools(response_content: list, user_id: int) -> list:
     return tool_results
 
 
-def chat(user_input: str, user_id: int, username: str = "user") -> str:
+def chat(user_input: str, user_id: int, username: str = "user", image_data: str = None, image_media_type: str = None) -> str:
     messages = _sessions.setdefault(str(user_id), [])
-    messages.append({"role": "user", "content": user_input})
+    if image_data:
+        ocr_text = _ocr_image(image_data, image_media_type)
+        content = f"{user_input}\n\n[Extracted text from image:]\n{ocr_text}"
+    else:
+        content = user_input
+    messages.append({"role": "user", "content": content})
 
     while True:
         response = client.messages.create(
-            model="claude-haiku-4-5-20251001",
+            model=MODEL_DEFAULT,
             max_tokens=2048,
             system=SYSTEM.format(today=date.today().isoformat(), username=username, category_hints=CATEGORY_HINTS),
             tools=TOOL_DEFINITIONS,
@@ -89,13 +114,18 @@ def chat(user_input: str, user_id: int, username: str = "user") -> str:
             messages.append({"role": "user", "content": tool_results})
 
 
-def stream_chat(user_input: str, user_id: int, username: str = "user"):
+def stream_chat(user_input: str, user_id: int, username: str = "user", image_data: str = None, image_media_type: str = None):
     messages = _sessions.setdefault(str(user_id), [])
-    messages.append({"role": "user", "content": user_input})
+    if image_data:
+        ocr_text = _ocr_image(image_data, image_media_type)
+        content = f"{user_input}\n\n[Extracted text from image:]\n{ocr_text}"
+    else:
+        content = user_input
+    messages.append({"role": "user", "content": content})
 
     while True:
         with client.messages.stream(
-            model="claude-haiku-4-5-20251001",
+            model=MODEL_DEFAULT,
             max_tokens=2048,
             system=SYSTEM.format(today=date.today().isoformat(), username=username, category_hints=CATEGORY_HINTS),
             tools=TOOL_DEFINITIONS,
