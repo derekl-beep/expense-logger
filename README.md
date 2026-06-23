@@ -32,6 +32,12 @@ Coming next, in priority order (each builds on the one before it):
 | 1 | Photo → auto-log | Snap a receipt or bank app transaction screenshot, agent extracts and logs the line items |
 | 2 | Email forwarding | Forward order/receipt emails to a dedicated inbox, agent extracts and logs automatically |
 | 3 | Family group chat bot | Log expenses from wherever the family already chats (WhatsApp/Telegram), not just the web app |
+| 4 | Budget limits & alerts | Set per-category monthly budgets; get notified when approaching or exceeding them |
+| 5 | Recurring expense detection | Detect recurring charges (rent, subscriptions) from history and auto-log or remind instead of manual re-entry |
+| 6 | Subscription tracker | Dedicated view of active subscriptions — renewal dates, monthly/annual cost rollup |
+| 7 | Weekly/monthly digest _(agentic)_ | Agent proactively sends a scheduled spending summary — trends, top categories, changes vs. last period |
+| 8 | Mid-month budget coach _(agentic)_ | Agent checks in mid-month, projects end-of-month spend per category, and nudges before you're over budget |
+| 9 | Email receipt inbox _(agentic)_ | Dedicated forwarding address — agent parses receipt emails into line items and logs them automatically, no chat needed |
 
 ---
 
