@@ -7,8 +7,6 @@ import traceback
 from datetime import date
 from pathlib import Path
 
-logger = logging.getLogger(__name__)
-
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
@@ -27,6 +25,8 @@ from agent.db import (
 )
 from agent.main import chat, stream_chat
 from api.auth import create_token, get_current_user, verify_password
+
+logger = logging.getLogger(__name__)
 
 DAILY_CALL_LIMIT = int(os.environ.get("DAILY_CALL_LIMIT", 50))
 
