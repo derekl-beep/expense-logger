@@ -11,14 +11,15 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-const STORAGE_KEY = "chat_messages";
 const TTL_MS = 24 * 60 * 60 * 1000;
 
 const INITIAL_MESSAGE = { role: "agent", text: "Hi! Log an expense or ask about your spending.", ts: Date.now() };
 
-function loadMessages() {
+const storageKey = (username) => `chat_messages_${username}`;
+
+function loadMessages(username) {
   try {
-    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+    const saved = JSON.parse(localStorage.getItem(storageKey(username)) || "[]");
     const cutoff = Date.now() - TTL_MS;
     const recent = saved.filter((m) => m.ts > cutoff);
     return recent.length > 0 ? recent : [INITIAL_MESSAGE];
@@ -27,16 +28,16 @@ function loadMessages() {
   }
 }
 
-function saveMessages(msgs) {
+function saveMessages(msgs, username) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(msgs));
+    localStorage.setItem(storageKey(username), JSON.stringify(msgs));
   } catch {
     // localStorage unavailable (e.g. private browsing) — drop silently
   }
 }
 
 export default function Chat({ onExpenseChange, className = "", token, username, onLogout, dark, onToggleDark }) {
-  const [messages, setMessages] = useState(loadMessages);
+  const [messages, setMessages] = useState(() => loadMessages(username));
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [images, setImages] = useState([]); // [{ data, mediaType, previewUrl }]
@@ -62,8 +63,8 @@ export default function Chat({ onExpenseChange, className = "", token, username,
   };
 
   useEffect(() => {
-    saveMessages(messages);
-  }, [messages]);
+    saveMessages(messages, username);
+  }, [messages, username]);
 
   const handleFileChange = (e) => {
     const files = Array.from(e.target.files || []);
@@ -194,7 +195,7 @@ export default function Chat({ onExpenseChange, className = "", token, username,
   const clearChat = () => {
     const fresh = [{ ...INITIAL_MESSAGE, ts: Date.now() }];
     setMessages(fresh);
-    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(storageKey(username));
   };
 
   return (
