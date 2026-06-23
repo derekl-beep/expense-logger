@@ -150,7 +150,7 @@ def find_similar_expenses(description: str, limit: int = 3) -> list[dict]:
 
 def get_expenses(start_date: str = None, end_date: str = None, category: str = None, logged_by: str = None) -> list[dict]:
     query = """
-        SELECT e.id, e.amount, e.category, e.description, e.date, e.flagged
+        SELECT e.id, e.amount, e.category, e.description, e.date, e.flagged, u.username AS logged_by
         FROM expenses e
         LEFT JOIN users u ON e.user_id = u.id
         WHERE 1=1
