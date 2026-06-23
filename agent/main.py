@@ -48,6 +48,8 @@ To delete, first call get_expenses to find the ID, then call delete_expense.
 # Conversation history keyed by user_id.
 _sessions: dict[str, list] = {}
 HISTORY_LIMIT = 30  # max raw messages passed to the API per turn
+MODEL_DEFAULT = "claude-haiku-4-5-20251001"
+MODEL_VISION = "claude-sonnet-4-6"  # better accuracy for reading text in images
 
 
 def _build_user_content(text: str, image_data: str = None, image_media_type: str = None):
@@ -87,10 +89,12 @@ def _run_tools(response_content: list, user_id: int) -> list:
 def chat(user_input: str, user_id: int, username: str = "user", image_data: str = None, image_media_type: str = None) -> str:
     messages = _sessions.setdefault(str(user_id), [])
     messages.append({"role": "user", "content": _build_user_content(user_input, image_data, image_media_type)})
+    first_turn = True
 
     while True:
+        model = MODEL_VISION if (image_data and first_turn) else MODEL_DEFAULT
         response = client.messages.create(
-            model="claude-haiku-4-5-20251001",
+            model=model,
             max_tokens=2048,
             system=SYSTEM.format(today=date.today().isoformat(), username=username, category_hints=CATEGORY_HINTS),
             tools=TOOL_DEFINITIONS,
@@ -98,6 +102,7 @@ def chat(user_input: str, user_id: int, username: str = "user", image_data: str 
         )
 
         messages.append({"role": "assistant", "content": response.content})
+        first_turn = False
 
         if response.stop_reason == "end_turn":
             if image_data:
@@ -115,10 +120,12 @@ def stream_chat(user_input: str, user_id: int, username: str = "user", image_dat
     messages = _sessions.setdefault(str(user_id), [])
     messages.append({"role": "user", "content": _build_user_content(user_input, image_data, image_media_type)})
     image_stripped = False
+    first_turn = True
 
     while True:
+        model = MODEL_VISION if (image_data and first_turn) else MODEL_DEFAULT
         with client.messages.stream(
-            model="claude-haiku-4-5-20251001",
+            model=model,
             max_tokens=2048,
             system=SYSTEM.format(today=date.today().isoformat(), username=username, category_hints=CATEGORY_HINTS),
             tools=TOOL_DEFINITIONS,
@@ -129,6 +136,7 @@ def stream_chat(user_input: str, user_id: int, username: str = "user", image_dat
             final = stream.get_final_message()
 
         messages.append({"role": "assistant", "content": final.content})
+        first_turn = False
 
         if image_data and not image_stripped:
             _strip_images(messages)
