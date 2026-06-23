@@ -61,10 +61,10 @@ def _build_user_content(text: str, image_data: str = None, image_media_type: str
 
 def _strip_images(messages: list) -> None:
     for msg in messages:
-        if isinstance(msg.get("content"), list):
-            msg["content"] = [
-                block for block in msg["content"] if block.get("type") != "image"
-            ] or msg["content"]
+        if msg.get("role") == "user" and isinstance(msg.get("content"), list):
+            filtered = [block for block in msg["content"] if isinstance(block, dict) and block.get("type") != "image"]
+            if filtered:
+                msg["content"] = filtered
 
 
 def _run_tools(response_content: list, user_id: int) -> list:
