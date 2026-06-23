@@ -42,8 +42,9 @@ To delete, first call get_expenses to find the ID, then call delete_expense.
 {category_hints}"""
 
 
-# Conversation history keyed by session_id. Replaced by user_id in Phase 2 (auth).
+# Conversation history keyed by user_id.
 _sessions: dict[str, list] = {}
+HISTORY_LIMIT = 30  # max raw messages passed to the API per turn
 
 
 def _run_tools(response_content: list, user_id: int) -> list:
@@ -73,7 +74,7 @@ def chat(user_input: str, user_id: int, username: str = "user") -> str:
             max_tokens=2048,
             system=SYSTEM.format(today=date.today().isoformat(), username=username, category_hints=CATEGORY_HINTS),
             tools=TOOL_DEFINITIONS,
-            messages=messages,
+            messages=messages[-HISTORY_LIMIT:],
         )
 
         messages.append({"role": "assistant", "content": response.content})
@@ -98,7 +99,7 @@ def stream_chat(user_input: str, user_id: int, username: str = "user"):
             max_tokens=2048,
             system=SYSTEM.format(today=date.today().isoformat(), username=username, category_hints=CATEGORY_HINTS),
             tools=TOOL_DEFINITIONS,
-            messages=messages,
+            messages=messages[-HISTORY_LIMIT:],
         ) as stream:
             for chunk in stream.text_stream:
                 yield chunk
