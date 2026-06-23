@@ -36,7 +36,8 @@ export default function Chat({ onExpenseChange, className = "", token, username,
   const [messages, setMessages] = useState(loadMessages);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [image, setImage] = useState(null); // { data, mediaType, previewUrl }
+  const [images, setImages] = useState([]); // [{ data, mediaType, previewUrl }]
+  const MAX_IMAGES = 6;
   const bottomRef = useRef(null);
   const fileInputRef = useRef(null);
 
@@ -49,28 +50,35 @@ export default function Chat({ onExpenseChange, className = "", token, username,
   }, [messages]);
 
   const handleFileChange = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = reader.result;
-      const base64 = dataUrl.split(",")[1];
-      setImage({ data: base64, mediaType: file.type, previewUrl: dataUrl });
-    };
-    reader.readAsDataURL(file);
+    const files = Array.from(e.target.files || []);
     e.target.value = "";
+    if (!files.length) return;
+    const room = MAX_IMAGES - images.length;
+    files.slice(0, room).forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = reader.result;
+        const base64 = dataUrl.split(",")[1];
+        setImages((prev) => [...prev, { data: base64, mediaType: file.type, previewUrl: dataUrl }]);
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const removeImage = (index) => {
+    setImages((prev) => prev.filter((_, i) => i !== index));
   };
 
   const sendMessage = async (text, displayText = null) => {
     if (!text || loading) return;
-    const attachedImage = image;
-    setImage(null);
+    const attachedImages = images;
+    setImages([]);
     setMessages((prev) => [
       ...prev,
       {
         role: "user",
         text: displayText ?? text,
-        imagePreview: attachedImage?.previewUrl ?? null,
+        imagePreviews: attachedImages.map((img) => img.previewUrl),
         ts: Date.now(),
       },
     ]);
@@ -84,8 +92,9 @@ export default function Chat({ onExpenseChange, className = "", token, username,
       },
       body: JSON.stringify({
         message: text,
-        image_data: attachedImage?.data ?? null,
-        image_media_type: attachedImage?.mediaType ?? null,
+        images: attachedImages.length
+          ? attachedImages.map((img) => ({ data: img.data, media_type: img.mediaType }))
+          : null,
       }),
     });
 
@@ -132,7 +141,7 @@ export default function Chat({ onExpenseChange, className = "", token, username,
   };
 
   const send = () => {
-    const text = input.trim() || (image ? "Please log the expenses from this image." : "");
+    const text = input.trim() || (images.length ? `Please log the expenses from ${images.length > 1 ? "these images" : "this image"}.` : "");
     if (!text) return;
     setInput("");
     sendMessage(text);
@@ -218,8 +227,12 @@ export default function Chat({ onExpenseChange, className = "", token, username,
                   ? "bg-destructive/10 text-destructive rounded-bl-sm"
                   : "bg-muted text-foreground rounded-bl-sm"
             }`}>
-              {m.imagePreview && (
-                <img src={m.imagePreview} alt="attached" onClick={() => setLightbox(m.imagePreview)} className="mb-1.5 max-h-40 rounded-lg object-contain cursor-zoom-in" />
+              {m.imagePreviews?.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mb-1.5">
+                  {m.imagePreviews.map((src, j) => (
+                    <img key={j} src={src} alt="attached" onClick={() => setLightbox(src)} className="max-h-40 rounded-lg object-contain cursor-zoom-in" />
+                  ))}
+                </div>
               )}
               {m.role === "agent"
                 ? <div className="prose prose-sm dark:prose-invert max-w-none [&_table]:text-xs [&_th]:py-1 [&_td]:py-1 [&_p]:my-0.5">
@@ -241,20 +254,24 @@ export default function Chat({ onExpenseChange, className = "", token, username,
 
       {/* Input */}
       <div className="px-4 pt-3 pb-[max(12px,env(safe-area-inset-bottom))] border-t border-border shrink-0">
-        {image && (
-          <div className="relative inline-block mb-2">
-            <img src={image.previewUrl} alt="preview" className="h-16 rounded-lg object-contain border border-border" />
-            <button
-              onClick={() => setImage(null)}
-              className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-muted text-muted-foreground text-xs flex items-center justify-center leading-none hover:bg-destructive hover:text-destructive-foreground"
-            >×</button>
+        {images.length > 0 && (
+          <div className="flex flex-wrap gap-2 mb-2">
+            {images.map((img, i) => (
+              <div key={i} className="relative inline-block">
+                <img src={img.previewUrl} alt="preview" className="h-16 rounded-lg object-contain border border-border" />
+                <button
+                  onClick={() => removeImage(i)}
+                  className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-muted text-muted-foreground text-xs flex items-center justify-center leading-none hover:bg-destructive hover:text-destructive-foreground"
+                >×</button>
+              </div>
+            ))}
           </div>
         )}
         <div className="flex items-end gap-2">
-          <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
+          <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleFileChange} />
           <button
             onClick={() => fileInputRef.current?.click()}
-            disabled={loading}
+            disabled={loading || images.length >= MAX_IMAGES}
             className="shrink-0 w-9 h-9 flex items-center justify-center rounded-2xl border border-input text-muted-foreground hover:bg-muted transition-colors disabled:opacity-50 text-base"
             title="Attach image"
           >📎</button>
@@ -272,7 +289,7 @@ export default function Chat({ onExpenseChange, className = "", token, username,
               e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px";
             }}
           />
-          <Button onClick={send} disabled={loading || (!input.trim() && !image)} size="sm" className="shrink-0 rounded-2xl px-5">Send</Button>
+          <Button onClick={send} disabled={loading || (!input.trim() && images.length === 0)} size="sm" className="shrink-0 rounded-2xl px-5">Send</Button>
         </div>
       </div>
       {lightbox && (
