@@ -36,6 +36,9 @@ For all other edits and flags, call get_expenses to find the right record first,
 If the user refers to "the last one", "that expense", or similar, call get_expenses (no filters, most recent first) to identify it by context.
 Flagging marks an expense for follow-up (flagged=true). Unflagging clears it (flagged=false).
 
+## Receipt / screenshot scanning
+When the user sends an image, extract all visible expense line items from it. For each item, infer the date (use today if unclear), description, amount, and category, then call save_expense. If any amount or category is genuinely ambiguous, ask the user — but don't ask for confirmation on items you're confident about.
+
 ## Deleting
 To delete, first call get_expenses to find the ID, then call delete_expense.
 
@@ -45,6 +48,23 @@ To delete, first call get_expenses to find the ID, then call delete_expense.
 # Conversation history keyed by user_id.
 _sessions: dict[str, list] = {}
 HISTORY_LIMIT = 30  # max raw messages passed to the API per turn
+
+
+def _build_user_content(text: str, image_data: str = None, image_media_type: str = None):
+    if not image_data:
+        return text
+    return [
+        {"type": "image", "source": {"type": "base64", "media_type": image_media_type, "data": image_data}},
+        {"type": "text", "text": text},
+    ]
+
+
+def _strip_images(messages: list) -> None:
+    for msg in messages:
+        if isinstance(msg.get("content"), list):
+            msg["content"] = [
+                block for block in msg["content"] if block.get("type") != "image"
+            ] or msg["content"]
 
 
 def _run_tools(response_content: list, user_id: int) -> list:
@@ -64,9 +84,9 @@ def _run_tools(response_content: list, user_id: int) -> list:
     return tool_results
 
 
-def chat(user_input: str, user_id: int, username: str = "user") -> str:
+def chat(user_input: str, user_id: int, username: str = "user", image_data: str = None, image_media_type: str = None) -> str:
     messages = _sessions.setdefault(str(user_id), [])
-    messages.append({"role": "user", "content": user_input})
+    messages.append({"role": "user", "content": _build_user_content(user_input, image_data, image_media_type)})
 
     while True:
         response = client.messages.create(
@@ -80,6 +100,8 @@ def chat(user_input: str, user_id: int, username: str = "user") -> str:
         messages.append({"role": "assistant", "content": response.content})
 
         if response.stop_reason == "end_turn":
+            if image_data:
+                _strip_images(messages)
             for block in response.content:
                 if hasattr(block, "text"):
                     return block.text
@@ -89,9 +111,10 @@ def chat(user_input: str, user_id: int, username: str = "user") -> str:
             messages.append({"role": "user", "content": tool_results})
 
 
-def stream_chat(user_input: str, user_id: int, username: str = "user"):
+def stream_chat(user_input: str, user_id: int, username: str = "user", image_data: str = None, image_media_type: str = None):
     messages = _sessions.setdefault(str(user_id), [])
-    messages.append({"role": "user", "content": user_input})
+    messages.append({"role": "user", "content": _build_user_content(user_input, image_data, image_media_type)})
+    image_stripped = False
 
     while True:
         with client.messages.stream(
@@ -106,6 +129,10 @@ def stream_chat(user_input: str, user_id: int, username: str = "user"):
             final = stream.get_final_message()
 
         messages.append({"role": "assistant", "content": final.content})
+
+        if image_data and not image_stripped:
+            _strip_images(messages)
+            image_stripped = True
 
         if final.stop_reason == "end_turn":
             break
