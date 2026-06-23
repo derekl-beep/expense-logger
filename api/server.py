@@ -1,9 +1,13 @@
 import csv
 import io
 import json
+import logging
 import os
+import traceback
 from datetime import date
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -91,6 +95,7 @@ def chat_stream_endpoint(req: ChatRequest, user_id: int = Depends(check_rate_lim
             for chunk in stream_chat(req.message, user_id, username, req.image_data, req.image_media_type):
                 yield f"data: {json.dumps({'text': chunk})}\n\n"
         except Exception:
+            logger.error("stream_chat error:\n%s", traceback.format_exc())
             yield f"data: {json.dumps({'error': 'Something went wrong. Please try again.'})}\n\n"
         yield "data: [DONE]\n\n"
 
