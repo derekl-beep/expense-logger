@@ -89,18 +89,53 @@ const formatMonth = (ym) => {
   return new Date(year, month - 1).toLocaleString("default", { month: "long", year: "numeric" });
 };
 
-const CategoryBadge = ({ category, small = false }) => {
+const USER_DOT_COLORS = ["bg-blue-500", "bg-pink-500", "bg-emerald-500", "bg-amber-500", "bg-violet-500"];
+
+const userColor = (username) => {
+  let hash = 0;
+  for (let i = 0; i < username.length; i++) hash = (hash * 31 + username.charCodeAt(i)) >>> 0;
+  return USER_DOT_COLORS[hash % USER_DOT_COLORS.length];
+};
+
+const UserDot = ({ loggedBy, onUserClick, userActive, className = "" }) => (
+  <button
+    type="button"
+    title={loggedBy}
+    onClick={(ev) => { ev.stopPropagation(); onUserClick?.(loggedBy); }}
+    className={`w-3.5 h-3.5 rounded-full ring-2 ring-background flex items-center justify-center text-[8px] font-bold text-white leading-none ${userColor(loggedBy)} ${userActive ? "ring-foreground" : ""} ${className}`}
+  >
+    {loggedBy[0].toUpperCase()}
+  </button>
+);
+
+const CategoryBadge = ({ category, small = false, loggedBy, onUserClick, userActive }) => {
   const Icon = CATEGORY_ICONS[category];
+  if (small) {
+    return (
+      <span className="relative inline-flex shrink-0">
+        <span
+          title={category}
+          className={`inline-flex items-center rounded font-medium p-1.5 ${CATEGORY_COLORS[category] ?? "bg-muted text-muted-foreground"}`}
+        >
+          {Icon && <Icon className="size-3.5" />}
+          <span className="sr-only">{category}</span>
+        </span>
+        {loggedBy && (
+          <UserDot loggedBy={loggedBy} onUserClick={onUserClick} userActive={userActive} className="absolute -bottom-1 -right-1" />
+        )}
+      </span>
+    );
+  }
   return (
-    <span
-      title={category}
-      className={`inline-flex items-center rounded font-medium ${
-        small ? "p-1.5" : "gap-1 px-2 py-0.5 text-xs rounded-md"
-      } ${CATEGORY_COLORS[category] ?? "bg-muted text-muted-foreground"}`}
-    >
-      {Icon && <Icon className={small ? "size-3.5" : "size-3"} />}
-      {!small && category}
-      {small && <span className="sr-only">{category}</span>}
+    <span className="inline-flex items-center gap-1.5 shrink-0">
+      <span
+        title={category}
+        className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-md font-medium ${CATEGORY_COLORS[category] ?? "bg-muted text-muted-foreground"}`}
+      >
+        {Icon && <Icon className="size-3" />}
+        {category}
+      </span>
+      {loggedBy && <UserDot loggedBy={loggedBy} onUserClick={onUserClick} userActive={userActive} />}
     </span>
   );
 };
@@ -129,6 +164,7 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
   const [deletedIds, setDeletedIds] = useState(() => new Set());
   const [showAllCategories, setShowAllCategories] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState(null);
+  const [userFilter, setUserFilter] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const pendingDeletes = useRef({});
   const listRef = useRef(null);
@@ -167,6 +203,7 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
     .filter((e) => !flaggedOnly || e.flagged);
   const filtered = monthFlagFiltered
     .filter((e) => !categoryFilter || e.category === categoryFilter)
+    .filter((e) => !userFilter || e.logged_by === userFilter)
     .filter((e) => !searchQuery || e.description.toLowerCase().includes(searchQuery.trim().toLowerCase()));
   const total = filtered.reduce((sum, e) => sum + e.amount, 0);
   const emptyMessage = items.length === 0 ? "No expenses yet" : "No expenses match your filters";
@@ -381,6 +418,15 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
               <span className="text-muted-foreground">✕</span>
             </button>
           )}
+          {userFilter && (
+            <button
+              onClick={() => setUserFilter(null)}
+              className="h-8 px-3 text-xs inline-flex items-center gap-1.5 rounded-md border border-foreground/30 bg-muted text-foreground"
+            >
+              {userFilter}
+              <span className="text-muted-foreground">✕</span>
+            </button>
+          )}
           <button
             onClick={() => setFlaggedOnly((f) => !f)}
             className={`h-8 px-3 text-xs inline-flex items-center gap-1 rounded-md border transition-colors ${
@@ -485,7 +531,13 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
               </div>
               {items.map((e) => (
                 <div key={e.id} className="flex items-center gap-3 px-4 py-3 border-b border-border/50 active:bg-muted transition-colors cursor-pointer" onClick={() => openEdit(e)}>
-                  <CategoryBadge category={e.category} small />
+                  <CategoryBadge
+                    category={e.category}
+                    small
+                    loggedBy={e.logged_by}
+                    onUserClick={(u) => setUserFilter((f) => (f === u ? null : u))}
+                    userActive={userFilter === e.logged_by}
+                  />
                   <span className="flex-1 text-sm font-medium text-foreground truncate">{e.description}</span>
                   <span className="text-sm font-semibold text-foreground tabular-nums shrink-0">${e.amount.toFixed(2)}</span>
                   <button
@@ -524,7 +576,14 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
               >
                 <td className="px-4 py-3 text-xs text-muted-foreground tabular-nums whitespace-nowrap">{formatDate(e.date)}</td>
                 <td className="px-3 py-3 text-sm text-foreground">{e.description}</td>
-                <td className="px-3 py-3"><CategoryBadge category={e.category} /></td>
+                <td className="px-3 py-3">
+                  <CategoryBadge
+                    category={e.category}
+                    loggedBy={e.logged_by}
+                    onUserClick={(u) => setUserFilter((f) => (f === u ? null : u))}
+                    userActive={userFilter === e.logged_by}
+                  />
+                </td>
                 <td className="px-3 py-3 text-right text-sm font-medium text-foreground tabular-nums">${e.amount.toFixed(2)}</td>
                 <td className="py-3 px-1">
                   <button
