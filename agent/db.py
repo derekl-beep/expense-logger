@@ -12,7 +12,14 @@ _conn = None
 def _get_conn():
     global _conn
     if _conn is None or _conn.closed:
-        _conn = psycopg2.connect(os.environ["DATABASE_URL"], cursor_factory=psycopg2.extras.RealDictCursor)
+        _conn = psycopg2.connect(
+            os.environ["DATABASE_URL"],
+            cursor_factory=psycopg2.extras.RealDictCursor,
+            keepalives=1,
+            keepalives_idle=60,
+            keepalives_interval=10,
+            keepalives_count=5,
+        )
         _conn.autocommit = True
     return _conn
 
@@ -22,7 +29,7 @@ def _run(sql: str, params=None):
         cur = _get_conn().cursor()
         cur.execute(sql, params or [])
         return cur
-    except psycopg2.InterfaceError:
+    except (psycopg2.InterfaceError, psycopg2.OperationalError):
         # Connection was dropped (e.g. Neon idle timeout) — reconnect and retry once
         global _conn
         _conn = None
