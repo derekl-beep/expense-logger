@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import {
   Car, Home, Package, Plane, UtensilsCrossed, Coffee, ShoppingCart, Sofa,
   Film, SprayCan, HeartPulse, Shirt, Phone, Bus, Fuel, Sparkles, Zap, Repeat, X, ArrowUp, MoreHorizontal,
+  Flag, Trash2,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -148,6 +149,129 @@ const ExpenseSkeleton = () => (
   </div>
 );
 
+const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
+
+function useAnimatedNumber(value, duration = 350) {
+  const [display, setDisplay] = useState(value);
+  const fromRef = useRef(value);
+  const rafRef = useRef(null);
+
+  useEffect(() => {
+    const from = fromRef.current;
+    if (from === value) return;
+    const start = performance.now();
+
+    const tick = (now) => {
+      const t = Math.min(1, (now - start) / duration);
+      const current = from + (value - from) * easeOutCubic(t);
+      fromRef.current = current;
+      setDisplay(current);
+      if (t < 1) {
+        rafRef.current = requestAnimationFrame(tick);
+      } else {
+        fromRef.current = value;
+        setDisplay(value);
+      }
+    };
+    rafRef.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
+
+  return display;
+}
+
+const SWIPE_MAX = 88;
+const SWIPE_THRESHOLD = 64;
+
+const SwipeableRow = ({ onSwipeLeft, onSwipeRight, children }) => {
+  const [dx, setDx] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const startRef = useRef({ x: 0, y: 0 });
+  const axisRef = useRef(null); // "x" | "y" | null
+
+  const onTouchStart = (e) => {
+    const t = e.touches[0];
+    startRef.current = { x: t.clientX, y: t.clientY };
+    axisRef.current = null;
+    setDragging(false);
+  };
+
+  const onTouchMove = (e) => {
+    const t = e.touches[0];
+    const deltaX = t.clientX - startRef.current.x;
+    const deltaY = t.clientY - startRef.current.y;
+
+    if (axisRef.current === null && (Math.abs(deltaX) > 8 || Math.abs(deltaY) > 8)) {
+      axisRef.current = Math.abs(deltaX) > Math.abs(deltaY) ? "x" : "y";
+    }
+    if (axisRef.current !== "x") return;
+
+    setDragging(true);
+    const clamped = Math.max(-SWIPE_MAX, Math.min(SWIPE_MAX, deltaX));
+    setDx(clamped);
+  };
+
+  const onTouchEnd = () => {
+    if (dx >= SWIPE_THRESHOLD) onSwipeRight?.();
+    else if (dx <= -SWIPE_THRESHOLD) onSwipeLeft?.();
+    setDragging(false);
+    setDx(0);
+  };
+
+  return (
+    <div className="relative overflow-hidden">
+      <div className="absolute inset-0 flex items-stretch justify-between">
+        <div className="flex items-center justify-start pl-4 bg-amber-500 text-white" style={{ width: SWIPE_MAX }}>
+          <Flag className="w-4 h-4" />
+        </div>
+        <div className="flex items-center justify-end pr-4 bg-destructive text-destructive-foreground" style={{ width: SWIPE_MAX }}>
+          <Trash2 className="w-4 h-4" />
+        </div>
+      </div>
+      <div
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        style={{
+          transform: `translateX(${dx}px)`,
+          transition: dragging ? "none" : "transform 200ms ease-out",
+          touchAction: "pan-y",
+        }}
+        className="relative bg-background"
+      >
+        {children}
+      </div>
+    </div>
+  );
+};
+
+const BreakdownRow = ({ category, amount, count, pct, barPct, active, onClick }) => {
+  const animatedAmount = useAnimatedNumber(amount);
+  const animatedPct = useAnimatedNumber(pct);
+  return (
+    <button
+      type="button"
+      title={`$${amount.toFixed(2)} across ${count} transaction${count === 1 ? "" : "s"}`}
+      onClick={onClick}
+      className={`flex items-center gap-2 w-full text-left rounded-md -mx-1 px-1 py-0.5 transition-colors ${
+        active ? "bg-muted" : "hover:bg-muted/50"
+      }`}
+    >
+      <CategoryBadge category={category} small />
+      <span className="text-xs text-foreground w-24 md:w-32 truncate">{category}</span>
+      <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
+        <div
+          className={`h-full rounded-full transition-[width] duration-300 ease-out ${CATEGORY_BAR_COLORS[category] ?? "bg-foreground/40"}`}
+          style={{ width: `${barPct}%` }}
+        />
+      </div>
+      <span className="text-xs tabular-nums text-muted-foreground w-9 text-right">{animatedPct.toFixed(0)}%</span>
+      <span className="text-xs font-medium tabular-nums text-foreground w-14 text-right">${animatedAmount.toFixed(0)}</span>
+    </button>
+  );
+};
+
 export default function ExpenseTable({ expenses, className = "", token, onExpenseChange, onUnauthorized, loading = false }) {
   const authFetch = (url, opts = {}) => {
     const res = fetch(url, { ...opts, headers: { ...opts.headers, Authorization: `Bearer ${token}` } });
@@ -206,6 +330,7 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
     .filter((e) => !userFilter || e.logged_by === userFilter)
     .filter((e) => !searchQuery || e.description.toLowerCase().includes(searchQuery.trim().toLowerCase()));
   const total = filtered.reduce((sum, e) => sum + e.amount, 0);
+  const animatedTotal = useAnimatedNumber(total);
   const emptyMessage = items.length === 0 ? "No expenses yet" : "No expenses match your filters";
 
   const categoryTotals = {};
@@ -227,7 +352,7 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
     .sort((a, b) => b.amount - a.amount);
 
   const toggleFlag = async (e, ev) => {
-    ev.stopPropagation();
+    ev?.stopPropagation();
     const flagged = !e.flagged;
     setOverrides((prev) => ({ ...prev, [e.id]: { ...prev[e.id], flagged } }));
     try {
@@ -398,7 +523,7 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
         <div className="flex items-center justify-between md:justify-start md:gap-3">
           <span className="text-sm font-semibold text-foreground">All Expenses</span>
           <span className="text-xs text-muted-foreground md:hidden">
-            Total: <span className="font-semibold text-foreground">${total.toFixed(2)}</span>
+            Total: <span className="font-semibold text-foreground">${animatedTotal.toFixed(2)}</span>
           </span>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -438,7 +563,7 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
             ⚑ Flagged
           </button>
           <span className="text-xs text-muted-foreground hidden md:inline">
-            Total: <span className="font-semibold text-foreground">${total.toFixed(2)}</span>
+            Total: <span className="font-semibold text-foreground">${animatedTotal.toFixed(2)}</span>
           </span>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -483,23 +608,16 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
             <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Breakdown</div>
             <div className="space-y-1.5">
               {(showAllCategories ? breakdown : breakdown.slice(0, 5)).map(({ category, amount, count, pct, barPct }) => (
-                <button
+                <BreakdownRow
                   key={category}
-                  type="button"
-                  title={`$${amount.toFixed(2)} across ${count} transaction${count === 1 ? "" : "s"}`}
+                  category={category}
+                  amount={amount}
+                  count={count}
+                  pct={pct}
+                  barPct={barPct}
+                  active={categoryFilter === category}
                   onClick={() => setCategoryFilter((c) => (c === category ? null : category))}
-                  className={`flex items-center gap-2 w-full text-left rounded-md -mx-1 px-1 py-0.5 transition-colors ${
-                    categoryFilter === category ? "bg-muted" : "hover:bg-muted/50"
-                  }`}
-                >
-                  <CategoryBadge category={category} small />
-                  <span className="text-xs text-foreground w-24 md:w-32 truncate">{category}</span>
-                  <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
-                    <div className={`h-full rounded-full ${CATEGORY_BAR_COLORS[category] ?? "bg-foreground/40"}`} style={{ width: `${barPct}%` }} />
-                  </div>
-                  <span className="text-xs tabular-nums text-muted-foreground w-9 text-right">{pct.toFixed(0)}%</span>
-                  <span className="text-xs font-medium tabular-nums text-foreground w-14 text-right">${amount.toFixed(0)}</span>
-                </button>
+                />
               ))}
             </div>
             {breakdown.length > 5 && (
@@ -530,23 +648,25 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
                 <span className="text-xs font-medium text-muted-foreground">{formatSectionDate(date)}</span>
               </div>
               {items.map((e) => (
-                <div key={e.id} className="flex items-center gap-3 px-4 py-3 border-b border-border/50 active:bg-muted transition-colors cursor-pointer" onClick={() => openEdit(e)}>
-                  <CategoryBadge
-                    category={e.category}
-                    small
-                    loggedBy={e.logged_by}
-                    onUserClick={(u) => setUserFilter((f) => (f === u ? null : u))}
-                    userActive={userFilter === e.logged_by}
-                  />
-                  <span className="flex-1 text-sm font-medium text-foreground truncate">{e.description}</span>
-                  <span className="text-sm font-semibold text-foreground tabular-nums shrink-0">${e.amount.toFixed(2)}</span>
-                  <button
-                    onClick={(ev) => toggleFlag(e, ev)}
-                    className={`shrink-0 w-7 h-7 flex items-center justify-center rounded-md text-sm transition-colors ${
-                      e.flagged ? "text-amber-500 dark:text-amber-400" : "text-muted-foreground/30 hover:text-amber-500"
-                    }`}
-                  >⚑</button>
-                </div>
+                <SwipeableRow key={e.id} onSwipeRight={() => toggleFlag(e)} onSwipeLeft={() => deleteExpenseById(e.id)}>
+                  <div className="flex items-center gap-3 px-4 py-3 border-b border-border/50 active:bg-muted transition-colors cursor-pointer" onClick={() => openEdit(e)}>
+                    <CategoryBadge
+                      category={e.category}
+                      small
+                      loggedBy={e.logged_by}
+                      onUserClick={(u) => setUserFilter((f) => (f === u ? null : u))}
+                      userActive={userFilter === e.logged_by}
+                    />
+                    <span className="flex-1 text-sm font-medium text-foreground truncate">{e.description}</span>
+                    <span className="text-sm font-semibold text-foreground tabular-nums shrink-0">${e.amount.toFixed(2)}</span>
+                    <button
+                      onClick={(ev) => toggleFlag(e, ev)}
+                      className={`shrink-0 w-7 h-7 flex items-center justify-center rounded-md text-sm transition-colors ${
+                        e.flagged ? "text-amber-500 dark:text-amber-400" : "text-muted-foreground/30 hover:text-amber-500"
+                      }`}
+                    >⚑</button>
+                  </div>
+                </SwipeableRow>
               ))}
             </div>
           ))}
