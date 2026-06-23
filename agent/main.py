@@ -37,7 +37,7 @@ If the user refers to "the last one", "that expense", or similar, call get_expen
 Flagging marks an expense for follow-up (flagged=true). Unflagging clears it (flagged=false).
 
 ## Receipt / screenshot scanning
-When the user sends an image, extract all visible expense line items from it. Read dates and amounts exactly as shown — do not approximate or infer them. Only use today's date if no date is visible at all. For category, use your best judgement. Call save_expense for each item. If an amount is genuinely unreadable, ask the user for that specific item rather than guessing.
+When the user's message contains extracted text from an image (prefixed with "[Extracted text from image:]"), parse it for expense line items. Read dates and amounts exactly as shown — do not approximate. For category, use your best judgement. Call save_expense for each item.
 
 ## Deleting
 To delete, first call get_expenses to find the ID, then call delete_expense.
@@ -52,21 +52,19 @@ MODEL_DEFAULT = "claude-haiku-4-5-20251001"
 MODEL_VISION = "claude-sonnet-4-6"  # better accuracy for reading text in images
 
 
-def _build_user_content(text: str, image_data: str = None, image_media_type: str = None):
-    if not image_data:
-        return text
-    return [
-        {"type": "image", "source": {"type": "base64", "media_type": image_media_type, "data": image_data}},
-        {"type": "text", "text": text},
-    ]
-
-
-def _strip_images(messages: list) -> None:
-    for msg in messages:
-        if msg.get("role") == "user" and isinstance(msg.get("content"), list):
-            filtered = [block for block in msg["content"] if isinstance(block, dict) and block.get("type") != "image"]
-            if filtered:
-                msg["content"] = filtered
+def _ocr_image(image_data: str, image_media_type: str) -> str:
+    response = client.messages.create(
+        model=MODEL_VISION,
+        max_tokens=1024,
+        messages=[{
+            "role": "user",
+            "content": [
+                {"type": "image", "source": {"type": "base64", "media_type": image_media_type, "data": image_data}},
+                {"type": "text", "text": "Extract all text from this image exactly as it appears. Preserve all numbers, dates, and formatting precisely. Output only the extracted text, nothing else."},
+            ],
+        }],
+    )
+    return response.content[0].text
 
 
 def _run_tools(response_content: list, user_id: int) -> list:
@@ -88,13 +86,16 @@ def _run_tools(response_content: list, user_id: int) -> list:
 
 def chat(user_input: str, user_id: int, username: str = "user", image_data: str = None, image_media_type: str = None) -> str:
     messages = _sessions.setdefault(str(user_id), [])
-    messages.append({"role": "user", "content": _build_user_content(user_input, image_data, image_media_type)})
-    first_turn = True
+    if image_data:
+        ocr_text = _ocr_image(image_data, image_media_type)
+        content = f"{user_input}\n\n[Extracted text from image:]\n{ocr_text}"
+    else:
+        content = user_input
+    messages.append({"role": "user", "content": content})
 
     while True:
-        model = MODEL_VISION if (image_data and first_turn) else MODEL_DEFAULT
         response = client.messages.create(
-            model=model,
+            model=MODEL_DEFAULT,
             max_tokens=2048,
             system=SYSTEM.format(today=date.today().isoformat(), username=username, category_hints=CATEGORY_HINTS),
             tools=TOOL_DEFINITIONS,
@@ -102,11 +103,8 @@ def chat(user_input: str, user_id: int, username: str = "user", image_data: str 
         )
 
         messages.append({"role": "assistant", "content": response.content})
-        first_turn = False
 
         if response.stop_reason == "end_turn":
-            if image_data:
-                _strip_images(messages)
             for block in response.content:
                 if hasattr(block, "text"):
                     return block.text
@@ -118,14 +116,16 @@ def chat(user_input: str, user_id: int, username: str = "user", image_data: str 
 
 def stream_chat(user_input: str, user_id: int, username: str = "user", image_data: str = None, image_media_type: str = None):
     messages = _sessions.setdefault(str(user_id), [])
-    messages.append({"role": "user", "content": _build_user_content(user_input, image_data, image_media_type)})
-    image_stripped = False
-    first_turn = True
+    if image_data:
+        ocr_text = _ocr_image(image_data, image_media_type)
+        content = f"{user_input}\n\n[Extracted text from image:]\n{ocr_text}"
+    else:
+        content = user_input
+    messages.append({"role": "user", "content": content})
 
     while True:
-        model = MODEL_VISION if (image_data and first_turn) else MODEL_DEFAULT
         with client.messages.stream(
-            model=model,
+            model=MODEL_DEFAULT,
             max_tokens=2048,
             system=SYSTEM.format(today=date.today().isoformat(), username=username, category_hints=CATEGORY_HINTS),
             tools=TOOL_DEFINITIONS,
@@ -136,11 +136,6 @@ def stream_chat(user_input: str, user_id: int, username: str = "user", image_dat
             final = stream.get_final_message()
 
         messages.append({"role": "assistant", "content": final.content})
-        first_turn = False
-
-        if image_data and not image_stripped:
-            _strip_images(messages)
-            image_stripped = True
 
         if final.stop_reason == "end_turn":
             break
