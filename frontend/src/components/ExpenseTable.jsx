@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   Car, Home, Package, Plane, UtensilsCrossed, Coffee, ShoppingCart, Sofa,
-  Film, SprayCan, HeartPulse, Shirt, Phone, Bus, Fuel, Sparkles, Zap, Repeat, X,
+  Film, SprayCan, HeartPulse, Shirt, Phone, Bus, Fuel, Sparkles, Zap, Repeat, X, ArrowUp,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -131,6 +131,18 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
   const [categoryFilter, setCategoryFilter] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const pendingDeletes = useRef({});
+  const listRef = useRef(null);
+  const [showScrollToTop, setShowScrollToTop] = useState(false);
+
+  const handleListScroll = () => {
+    const el = listRef.current;
+    if (!el) return;
+    setShowScrollToTop(el.scrollTop > 300);
+  };
+
+  const scrollToTop = () => {
+    listRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   useEffect(() => {
     fetch("/categories").then((r) => r.json()).then(setCategories);
@@ -411,7 +423,8 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
         )}
       </div>
 
-      <div className="flex-1 overflow-y-auto overscroll-contain">
+      <div className="relative flex-1 overflow-hidden">
+      <div ref={listRef} onScroll={handleListScroll} className="h-full overflow-y-auto overscroll-contain">
 
         {/* ── Category breakdown ── */}
         {breakdown.length > 0 && (
@@ -528,6 +541,16 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
           </tbody>
         </table>
 
+      </div>
+      {showScrollToTop && (
+        <button
+          onClick={scrollToTop}
+          aria-label="Scroll to top"
+          className="absolute bottom-4 right-4 w-9 h-9 rounded-full bg-foreground text-background shadow-lg flex items-center justify-center hover:opacity-90 transition-opacity"
+        >
+          <ArrowUp className="w-4 h-4" />
+        </button>
+      )}
       </div>
     </div>
   );
