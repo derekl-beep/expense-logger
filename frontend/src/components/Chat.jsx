@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { ArrowDown, ImagePlus } from "lucide-react";
+import { ArrowDown, ArrowUp, ImagePlus, MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -214,8 +214,8 @@ export default function Chat({ onExpenseChange, className = "", token, username,
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="w-7 h-7 flex items-center justify-center rounded-md text-muted-foreground hover:bg-muted transition-colors text-base">
-                ⋯
+              <button className="w-7 h-7 flex items-center justify-center rounded-md text-muted-foreground hover:bg-muted transition-colors">
+                <MoreHorizontal className="w-4 h-4" />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-40">
@@ -318,7 +318,15 @@ export default function Chat({ onExpenseChange, className = "", token, username,
               e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px";
             }}
           />
-          <Button onClick={send} disabled={loading || (!input.trim() && images.length === 0)} size="sm" className="shrink-0 rounded-2xl px-5">Send</Button>
+          <Button
+            onClick={send}
+            disabled={loading || (!input.trim() && images.length === 0)}
+            size="icon"
+            className="shrink-0 w-9 h-9 rounded-full"
+            aria-label="Send message"
+          >
+            <ArrowUp className="w-4 h-4" />
+          </Button>
         </div>
       </div>
       {lightbox && (

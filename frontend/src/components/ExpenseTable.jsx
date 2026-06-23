@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   Car, Home, Package, Plane, UtensilsCrossed, Coffee, ShoppingCart, Sofa,
-  Film, SprayCan, HeartPulse, Shirt, Phone, Bus, Fuel, Sparkles, Zap, Repeat, X, ArrowUp,
+  Film, SprayCan, HeartPulse, Shirt, Phone, Bus, Fuel, Sparkles, Zap, Repeat, X, ArrowUp, MoreHorizontal,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -172,13 +172,18 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
   const emptyMessage = items.length === 0 ? "No expenses yet" : "No expenses match your filters";
 
   const categoryTotals = {};
-  monthFlagFiltered.forEach((e) => { categoryTotals[e.category] = (categoryTotals[e.category] || 0) + e.amount; });
+  const categoryCounts = {};
+  monthFlagFiltered.forEach((e) => {
+    categoryTotals[e.category] = (categoryTotals[e.category] || 0) + e.amount;
+    categoryCounts[e.category] = (categoryCounts[e.category] || 0) + 1;
+  });
   const categoryGrandTotal = monthFlagFiltered.reduce((sum, e) => sum + e.amount, 0);
   const maxCategoryTotal = Math.max(0, ...Object.values(categoryTotals));
   const breakdown = Object.entries(categoryTotals)
     .map(([category, amount]) => ({
       category,
       amount,
+      count: categoryCounts[category],
       pct: categoryGrandTotal ? (amount / categoryGrandTotal) * 100 : 0,
       barPct: maxCategoryTotal ? (amount / maxCategoryTotal) * 100 : 0,
     }))
@@ -391,8 +396,8 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
           </span>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="w-8 h-8 flex items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-muted transition-colors text-base">
-                ⋯
+              <button className="w-8 h-8 flex items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-muted transition-colors">
+                <MoreHorizontal className="w-4 h-4" />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-36">
@@ -431,10 +436,11 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
           <div className={`px-4 py-3 md:px-5 border-b border-border/50 ${searchQuery ? "hidden md:block" : ""}`}>
             <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Breakdown</div>
             <div className="space-y-1.5">
-              {(showAllCategories ? breakdown : breakdown.slice(0, 5)).map(({ category, amount, pct, barPct }) => (
+              {(showAllCategories ? breakdown : breakdown.slice(0, 5)).map(({ category, amount, count, pct, barPct }) => (
                 <button
                   key={category}
                   type="button"
+                  title={`$${amount.toFixed(2)} across ${count} transaction${count === 1 ? "" : "s"}`}
                   onClick={() => setCategoryFilter((c) => (c === category ? null : category))}
                   className={`flex items-center gap-2 w-full text-left rounded-md -mx-1 px-1 py-0.5 transition-colors ${
                     categoryFilter === category ? "bg-muted" : "hover:bg-muted/50"
