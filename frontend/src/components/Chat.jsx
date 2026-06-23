@@ -149,6 +149,15 @@ export default function Chat({ onExpenseChange, className = "", token, username,
     );
   };
 
+  const [lightbox, setLightbox] = useState(null);
+
+  useEffect(() => {
+    if (!lightbox) return;
+    const close = (e) => { if (e.key === "Escape") setLightbox(null); };
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, [lightbox]);
+
   const isTouchDevice = typeof window !== "undefined" && navigator.maxTouchPoints > 0;
 
   const onKeyDown = (e) => {
@@ -210,7 +219,7 @@ export default function Chat({ onExpenseChange, className = "", token, username,
                   : "bg-muted text-foreground rounded-bl-sm"
             }`}>
               {m.imagePreview && (
-                <img src={m.imagePreview} alt="attached" className="mb-1.5 max-h-40 rounded-lg object-contain" />
+                <img src={m.imagePreview} alt="attached" onClick={() => setLightbox(m.imagePreview)} className="mb-1.5 max-h-40 rounded-lg object-contain cursor-zoom-in" />
               )}
               {m.role === "agent"
                 ? <div className="prose prose-sm dark:prose-invert max-w-none [&_table]:text-xs [&_th]:py-1 [&_td]:py-1 [&_p]:my-0.5">
@@ -266,6 +275,11 @@ export default function Chat({ onExpenseChange, className = "", token, username,
           <Button onClick={send} disabled={loading || (!input.trim() && !image)} size="sm" className="shrink-0 rounded-2xl px-5">Send</Button>
         </div>
       </div>
+      {lightbox && (
+        <div onClick={() => setLightbox(null)} className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 cursor-zoom-out p-4">
+          <img src={lightbox} alt="full size" className="max-w-full max-h-full rounded-lg object-contain" onClick={(e) => e.stopPropagation()} />
+        </div>
+      )}
     </div>
   );
 }
