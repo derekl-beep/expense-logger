@@ -219,14 +219,29 @@ const SwipeableRow = ({ onSwipeLeft, onSwipeRight, children }) => {
     setDx(0);
   };
 
+  const pastRight = dx >= SWIPE_THRESHOLD;
+  const pastLeft = dx <= -SWIPE_THRESHOLD;
+
   return (
     <div className="relative overflow-hidden">
       <div className="absolute inset-0 flex items-stretch justify-between">
-        <div className="flex items-center justify-start pl-4 bg-amber-500 text-white" style={{ width: SWIPE_MAX }}>
-          <Flag className="w-4 h-4" />
+        <div
+          className={`flex items-center justify-start pl-4 text-white transition-colors duration-150 ${pastRight ? "bg-amber-600" : "bg-amber-500"}`}
+          style={{ width: SWIPE_MAX }}
+        >
+          <Flag
+            className="w-4 h-4 transition-transform duration-150"
+            style={{ transform: pastRight ? "scale(1.4)" : "scale(1)" }}
+          />
         </div>
-        <div className="flex items-center justify-end pr-4 bg-destructive text-destructive-foreground" style={{ width: SWIPE_MAX }}>
-          <Trash2 className="w-4 h-4" />
+        <div
+          className="flex items-center justify-end pr-4 bg-destructive text-destructive-foreground transition-colors duration-150"
+          style={{ width: SWIPE_MAX, filter: pastLeft ? "brightness(1.25)" : "none" }}
+        >
+          <Trash2
+            className="w-4 h-4 transition-transform duration-150"
+            style={{ transform: pastLeft ? "scale(1.4)" : "scale(1)" }}
+          />
         </div>
       </div>
       <div
