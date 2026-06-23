@@ -546,7 +546,7 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
         <button
           onClick={scrollToTop}
           aria-label="Scroll to top"
-          className="absolute bottom-4 right-4 w-9 h-9 rounded-full bg-foreground text-background shadow-lg flex items-center justify-center hover:opacity-90 transition-opacity"
+          className="absolute bottom-4 right-4 z-20 w-9 h-9 rounded-full bg-foreground text-background shadow-lg flex items-center justify-center hover:opacity-90 transition-opacity"
         >
           <ArrowUp className="w-4 h-4" />
         </button>

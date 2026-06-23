@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { ArrowDown } from "lucide-react";
+import { ArrowDown, ImagePlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -301,9 +301,9 @@ export default function Chat({ onExpenseChange, className = "", token, username,
           <button
             onClick={() => fileInputRef.current?.click()}
             disabled={loading || images.length >= MAX_IMAGES}
-            className="shrink-0 w-9 h-9 flex items-center justify-center rounded-2xl border border-input text-muted-foreground hover:bg-muted transition-colors disabled:opacity-50 text-base"
+            className="shrink-0 w-9 h-9 flex items-center justify-center rounded-2xl border border-input text-muted-foreground hover:bg-muted hover:text-foreground transition-colors disabled:opacity-50"
             title="Attach image"
-          >📎</button>
+          ><ImagePlus className="w-4 h-4" /></button>
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
