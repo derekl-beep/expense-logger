@@ -45,7 +45,23 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (token) fetchExpenses();
+    if (!token) return;
+    let ignore = false;
+    (async () => {
+      const res = await fetch("/expenses", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.status === 401) {
+        if (!ignore) handleLogout();
+        return;
+      }
+      const data = await res.json();
+      if (!ignore) {
+        setExpenses(data);
+        setExpensesLoading(false);
+      }
+    })();
+    return () => { ignore = true; };
   }, [token]);
 
   if (!token) return <><Login onLogin={handleLogin} /><Toaster theme={dark ? "dark" : "light"} /></>;
