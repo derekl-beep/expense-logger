@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { ArrowDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -40,10 +41,23 @@ export default function Chat({ onExpenseChange, className = "", token, username,
   const MAX_IMAGES = 6;
   const bottomRef = useRef(null);
   const fileInputRef = useRef(null);
+  const messagesContainerRef = useRef(null);
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  const handleMessagesScroll = () => {
+    const el = messagesContainerRef.current;
+    if (!el) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    setShowScrollToBottom(distanceFromBottom > 150);
+  };
+
+  const scrollToBottom = () => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
 
   useEffect(() => {
     saveMessages(messages);
@@ -217,7 +231,8 @@ export default function Chat({ onExpenseChange, className = "", token, username,
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto overscroll-contain p-4 flex flex-col gap-3">
+      <div className="relative flex-1 overflow-hidden">
+      <div ref={messagesContainerRef} onScroll={handleMessagesScroll} className="h-full overflow-y-auto overscroll-contain p-4 flex flex-col gap-3">
         {messages.map((m, i) => (
           <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
             <div className={`max-w-[85%] px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed ${
@@ -250,6 +265,16 @@ export default function Chat({ onExpenseChange, className = "", token, username,
           </div>
         )}
         <div ref={bottomRef} />
+      </div>
+      {showScrollToBottom && (
+        <button
+          onClick={scrollToBottom}
+          aria-label="Scroll to bottom"
+          className="absolute bottom-3 right-3 w-9 h-9 rounded-full bg-foreground text-background shadow-lg flex items-center justify-center hover:opacity-90 transition-opacity"
+        >
+          <ArrowDown className="w-4 h-4" />
+        </button>
+      )}
       </div>
 
       {/* Input */}
