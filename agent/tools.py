@@ -187,6 +187,5 @@ SUGGESTED_PROMPTS = [
     {"label": "Dining run rate", "prompt": "What's my dining run rate this month, compared to last month?"},
     {"label": "Spending trend", "prompt": "How has my dining spending trended over the last few months?"},
     {"label": "Biggest purchases", "prompt": "What are my biggest purchases this month?"},
-    {"label": "Who's spending more", "prompt": "Who's spent more this month?"},
     {"label": "Weekday pattern", "prompt": "What days of the week do I spend the most on?"},
 ]
