@@ -334,13 +334,24 @@ const valuesFromBudgetMap = (categories, budgetMap) => {
   return values;
 };
 
+const sortCategoriesByBudget = (categories, budgetMap) => {
+  const budgeted = [];
+  const unbudgeted = [];
+  categories.forEach((c) => (budgetMap[c] != null ? budgeted : unbudgeted).push(c));
+  budgeted.sort((a, b) => a.localeCompare(b));
+  unbudgeted.sort((a, b) => a.localeCompare(b));
+  return [...budgeted, ...unbudgeted];
+};
+
 const BudgetSettings = ({ categories, budgetMap, authFetch, onSaved }) => {
   const [values, setValues] = useState(() => valuesFromBudgetMap(categories, budgetMap));
   const [syncedBudgetMap, setSyncedBudgetMap] = useState(budgetMap);
+  const [orderedCategories, setOrderedCategories] = useState(() => sortCategoriesByBudget(categories, budgetMap));
 
   if (budgetMap !== syncedBudgetMap) {
     setSyncedBudgetMap(budgetMap);
     setValues(valuesFromBudgetMap(categories, budgetMap));
+    setOrderedCategories(sortCategoriesByBudget(categories, budgetMap));
   }
 
   const handleBlur = async (category) => {
@@ -384,7 +395,7 @@ const BudgetSettings = ({ categories, budgetMap, authFetch, onSaved }) => {
 
   return (
     <div className="space-y-1 max-h-[60vh] overflow-y-auto -mx-1 px-1">
-      {categories.map((category) => (
+      {orderedCategories.map((category) => (
         <div key={category} className="flex items-center gap-2 py-1">
           <CategoryBadge category={category} small />
           <span className="text-sm text-foreground flex-1 truncate">{category}</span>
