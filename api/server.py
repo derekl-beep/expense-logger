@@ -15,12 +15,15 @@ from pydantic import BaseModel
 
 from agent.categories import CATEGORIES
 from agent.db import (
+    delete_budget,
     delete_expense,
     get_api_call_count,
+    get_budgets,
     get_expenses,
     get_user_by_id,
     get_user_by_username,
     increment_api_call_count,
+    set_budget,
     update_expense,
 )
 from agent.main import chat, clear_session, stream_chat
@@ -130,6 +133,25 @@ def expenses_endpoint(user_id: int = Depends(get_current_user)):
 @app.get("/categories")
 def categories_endpoint():
     return CATEGORIES
+
+
+class BudgetRequest(BaseModel):
+    monthly_limit: float
+
+
+@app.get("/budgets")
+def budgets_endpoint(user_id: int = Depends(get_current_user)):
+    return get_budgets()
+
+
+@app.put("/budgets/{category}")
+def set_budget_endpoint(category: str, req: BudgetRequest, user_id: int = Depends(get_current_user)):
+    return set_budget(category, req.monthly_limit)
+
+
+@app.delete("/budgets/{category}")
+def delete_budget_endpoint(category: str, user_id: int = Depends(get_current_user)):
+    return delete_budget(category)
 
 
 @app.get("/chat/suggestions")

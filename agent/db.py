@@ -90,6 +90,14 @@ _run("""
     )
 """)
 
+_run("""
+    CREATE TABLE IF NOT EXISTS budgets (
+        category      TEXT PRIMARY KEY,
+        monthly_limit NUMERIC(10, 2) NOT NULL,
+        updated_at    TIMESTAMPTZ DEFAULT NOW()
+    )
+""")
+
 
 def get_user_by_username(username: str) -> dict | None:
     cur = _run("SELECT * FROM users WHERE username = %s", (username,))
@@ -506,6 +514,27 @@ def update_expense(
 
 def delete_expense(id: int) -> dict:
     _run("DELETE FROM expenses WHERE id = %s", (id,))
+    return {"status": "deleted"}
+
+
+def get_budgets() -> list[dict]:
+    cur = _run("SELECT category, monthly_limit FROM budgets ORDER BY category")
+    return [{"category": r["category"], "monthly_limit": float(r["monthly_limit"])} for r in cur.fetchall()]
+
+
+def set_budget(category: str, monthly_limit: float) -> dict:
+    _run(
+        """
+        INSERT INTO budgets (category, monthly_limit, updated_at) VALUES (%s, %s, NOW())
+        ON CONFLICT (category) DO UPDATE SET monthly_limit = EXCLUDED.monthly_limit, updated_at = NOW()
+        """,
+        (category, monthly_limit),
+    )
+    return {"status": "saved", "category": category, "monthly_limit": monthly_limit}
+
+
+def delete_budget(category: str) -> dict:
+    _run("DELETE FROM budgets WHERE category = %s", (category,))
     return {"status": "deleted"}
 
 
