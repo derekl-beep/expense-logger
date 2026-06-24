@@ -179,3 +179,14 @@ TOOL_HANDLERS = {
     "update_expense":         update_expense,
     "delete_expense":         delete_expense,
 }
+
+# Example prompts shown as chips in a fresh chat — one per analytics tool above,
+# kept here so they can't list a capability that doesn't actually exist as a tool.
+SUGGESTED_PROMPTS = [
+    {"label": "Summarize this month", "prompt": "Summarize this month by category, with a total."},
+    {"label": "Dining run rate", "prompt": "What's my dining run rate this month, compared to last month?"},
+    {"label": "Spending trend", "prompt": "How has my dining spending trended over the last few months?"},
+    {"label": "Biggest purchases", "prompt": "What are my biggest purchases this month?"},
+    {"label": "Who's spending more", "prompt": "Who's spent more this month?"},
+    {"label": "Weekday pattern", "prompt": "What days of the week do I spend the most on?"},
+]

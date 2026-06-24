@@ -24,6 +24,7 @@ from agent.db import (
     update_expense,
 )
 from agent.main import chat, stream_chat
+from agent.tools import SUGGESTED_PROMPTS
 from api.auth import create_token, get_current_user, verify_password
 
 logger = logging.getLogger(__name__)
@@ -123,6 +124,11 @@ def expenses_endpoint(user_id: int = Depends(get_current_user)):
 @app.get("/categories")
 def categories_endpoint():
     return CATEGORIES
+
+
+@app.get("/chat/suggestions")
+def chat_suggestions_endpoint():
+    return SUGGESTED_PROMPTS
 
 
 class UpdateRequest(BaseModel):

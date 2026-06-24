@@ -46,6 +46,11 @@ export default function Chat({ onExpenseChange, className = "", token, username,
   const fileInputRef = useRef(null);
   const messagesContainerRef = useRef(null);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+  const [suggestions, setSuggestions] = useState([]);
+
+  useEffect(() => {
+    fetch("/chat/suggestions").then((r) => r.json()).then(setSuggestions).catch(() => {});
+  }, []);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -262,6 +267,19 @@ export default function Chat({ onExpenseChange, className = "", token, username,
             </div>
           </div>
         ))}
+        {messages.length === 1 && suggestions.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 pl-1">
+            {suggestions.map((s) => (
+              <button
+                key={s.label}
+                onClick={() => sendMessage(s.prompt, s.label)}
+                className="text-xs px-3 py-1.5 rounded-full border border-input text-foreground hover:bg-muted transition-colors"
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+        )}
         {loading && (
           <div className="flex justify-start">
             <div className="bg-muted text-muted-foreground text-sm px-3.5 py-2.5 rounded-2xl rounded-bl-sm italic">
