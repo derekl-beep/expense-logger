@@ -150,7 +150,15 @@ def find_similar_expenses(description: str, limit: int = 3) -> list[dict]:
     return [{"description": r["description"], "category": r["category"], "score": float(r["score"])} for r in cur.fetchall()]
 
 
-def get_expenses(start_date: str = None, end_date: str = None, category: str = None, logged_by: str = None) -> list[dict]:
+def get_expenses(
+    start_date: str = None,
+    end_date: str = None,
+    category: str = None,
+    logged_by: str = None,
+    min_amount: float = None,
+    max_amount: float = None,
+    flagged: bool = None,
+) -> list[dict]:
     query = """
         SELECT e.id, e.amount, e.category, e.description, e.date, e.flagged, u.username AS logged_by
         FROM expenses e
@@ -170,6 +178,15 @@ def get_expenses(start_date: str = None, end_date: str = None, category: str = N
     if logged_by:
         query += " AND LOWER(u.username) = LOWER(%s)"
         params.append(logged_by)
+    if min_amount is not None:
+        query += " AND e.amount >= %s"
+        params.append(min_amount)
+    if max_amount is not None:
+        query += " AND e.amount <= %s"
+        params.append(max_amount)
+    if flagged is not None:
+        query += " AND e.flagged = %s"
+        params.append(flagged)
     query += " ORDER BY e.date DESC, e.id DESC"
     cur = _run(query, params)
     return [_row(r) for r in cur.fetchall()]
@@ -266,6 +283,85 @@ def get_run_rate(category: str, reference_date: str = None, compare_months: int 
         "projected_total": projected_total,
         "prior_months": prior_months,
         "pct_change_vs_last_month": pct_change_vs_last_month,
+    }
+
+
+def get_weekly_pace(category: str = None, reference_date: str = None, compare_weeks: int = 3) -> dict:
+    ref = date.fromisoformat(reference_date) if reference_date else date.today()
+    week_start = ref - timedelta(days=ref.isoweekday() - 1)  # Monday of ref's week
+    days_elapsed = (ref - week_start).days + 1
+
+    def _week_total(start: date, end: date) -> float:
+        query = "SELECT COALESCE(SUM(amount), 0) AS total FROM expenses WHERE date >= %s AND date <= %s"
+        params = [start.isoformat(), end.isoformat()]
+        if category:
+            query += " AND LOWER(category) = LOWER(%s)"
+            params.append(category)
+        cur = _run(query, params)
+        return float(cur.fetchone()["total"])
+
+    spent_so_far = _week_total(week_start, ref)
+    projected_total = round(spent_so_far / days_elapsed * 7, 2) if days_elapsed else 0.0
+
+    prior_weeks = []
+    for i in range(1, compare_weeks + 1):
+        w_start = week_start - timedelta(weeks=i)
+        w_end = w_start + timedelta(days=6)
+        prior_weeks.append({"week_start": w_start.isoformat(), "total": _week_total(w_start, w_end)})
+
+    last_week_total = prior_weeks[0]["total"] if prior_weeks else None
+    pct_change_vs_last_week = (
+        round((projected_total - last_week_total) / last_week_total * 100, 1)
+        if last_week_total else None
+    )
+
+    return {
+        "category": category,
+        "week_start": week_start.isoformat(),
+        "spent_so_far": spent_so_far,
+        "days_elapsed": days_elapsed,
+        "projected_total": projected_total,
+        "prior_weeks": prior_weeks,
+        "pct_change_vs_last_week": pct_change_vs_last_week,
+    }
+
+
+def get_yoy_comparison(category: str = None, month: str = None, logged_by: str = None) -> dict:
+    """Compare a calendar month's spending to the same calendar month one year prior."""
+    if month:
+        year, mo = (int(p) for p in month.split("-"))
+        this_month_start = date(year, mo, 1)
+    else:
+        this_month_start = date.today().replace(day=1)
+    last_year_start = this_month_start.replace(year=this_month_start.year - 1)
+
+    def _month_total(start: date) -> float:
+        end = _shift_month(start, 1) - timedelta(days=1)
+        query = "SELECT COALESCE(SUM(amount), 0) AS total FROM expenses e LEFT JOIN users u ON e.user_id = u.id WHERE e.date >= %s AND e.date <= %s"
+        params = [start.isoformat(), end.isoformat()]
+        if category:
+            query += " AND LOWER(e.category) = LOWER(%s)"
+            params.append(category)
+        if logged_by:
+            query += " AND LOWER(u.username) = LOWER(%s)"
+            params.append(logged_by)
+        cur = _run(query, params)
+        return float(cur.fetchone()["total"])
+
+    this_year_total = _month_total(this_month_start)
+    last_year_total = _month_total(last_year_start)
+    pct_change = (
+        round((this_year_total - last_year_total) / last_year_total * 100, 1)
+        if last_year_total else None
+    )
+
+    return {
+        "category": category,
+        "month": this_month_start.isoformat()[:7],
+        "this_year_total": this_year_total,
+        "last_year_month": last_year_start.isoformat()[:7],
+        "last_year_total": last_year_total,
+        "pct_change": pct_change,
     }
 
 

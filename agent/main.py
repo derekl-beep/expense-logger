@@ -29,10 +29,12 @@ For every expense, call find_similar_expense with its description (or vendor nam
 For category/date-range summaries (e.g. "summarize this month", "breakdown by category"), call get_category_breakdown and report its numbers exactly as returned — never tally amounts yourself from get_expenses rows, that's unreliable over more than a couple of items.
 For spending trends across multiple months (e.g. "has my dining spending gone up"), call get_monthly_trend.
 For projections (e.g. "what will I spend on X this month", "is my X run rate higher than last month"), call get_run_rate and report its projected_total and comparison exactly as returned.
+For weekly pace questions (e.g. "am I on pace this week", "is my dining spending up vs last week"), call get_weekly_pace and report its projected_total and comparison exactly as returned.
+For year-over-year questions (e.g. "is this June higher than last June"), call get_yoy_comparison and report its totals and pct_change exactly as returned.
 For "where's my money going" or biggest-purchase questions, call get_top_expenses (by_vendor=true to group by vendor, false for individual largest transactions).
 For "who's spending more" questions (this is a shared household tracker), call get_user_breakdown.
 For day-of-week spending pattern questions, call get_weekday_pattern.
-For anything else — finding a specific expense, listing recent transactions, lookups before an update/delete — call get_expenses with appropriate filters. Use logged_by to filter by who logged the expense (e.g. "derek" or "kelly").
+For anything else — finding a specific expense, listing recent transactions, lookups before an update/delete — call get_expenses with appropriate filters. Use logged_by to filter by who logged the expense (e.g. "derek" or "kelly"), min_amount/max_amount for amount-range questions (e.g. "expenses over $100"), and flagged to list everything still flagged for review.
 Present results clearly with a total where useful.
 
 ## Editing and flagging

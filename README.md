@@ -12,10 +12,12 @@ A personal expense tracker powered by an AI agent. Describe expenses in plain En
 
 - **Natural language input** — _"$12 lunch at the food court"_ is all you need to type
 - **Agentic decisions** — infers category, resolves vague dates like "yesterday", asks when unclear
+- **Photo → auto-log** — snap a receipt or bank app transaction screenshot, agent OCRs and logs the line items, deduping repeats across overlapping screenshots
 - **Vendor memory** — fuzzy-matches new expenses against past descriptions (Postgres trigram similarity) to reuse a vendor's category instead of asking again
 - **Duplicate detection** — flags same-day, same-amount, similar-description expenses for review instead of silently double-logging
 - **Full CRUD via chat** — update or delete past expenses through conversation
 - **Live expense table** — updates after every message, filterable by month and flagged status
+- **Spending analytics via chat** — category breakdowns, monthly trends, run-rate projections, top expenses, per-user and weekday breakdowns, all computed in SQL and reported exactly, never re-tallied by the model
 - **Monthly summary** — one-click breakdown by category with observations
 - **CSV export** — download all expenses anytime
 - **Installable on mobile** — add-to-home-screen support, dark mode persisted across sessions
@@ -25,19 +27,49 @@ A personal expense tracker powered by an AI agent. Describe expenses in plain En
 
 ## Roadmap
 
-Coming next, in priority order (each builds on the one before it):
+Tiered by value added to the user vs. implementation complexity — not strict build order, but higher tiers generally build on capabilities below them.
 
-| # | Feature | Why |
-|---|---|---|
-| 1 | Photo → auto-log | Snap a receipt or bank app transaction screenshot, agent extracts and logs the line items |
-| 2 | Email forwarding | Forward order/receipt emails to a dedicated inbox, agent extracts and logs automatically |
-| 3 | Family group chat bot | Log expenses from wherever the family already chats (WhatsApp/Telegram), not just the web app |
-| 4 | Budget limits & alerts | Set per-category monthly budgets; get notified when approaching or exceeding them |
-| 5 | Recurring expense detection | Detect recurring charges (rent, subscriptions) from history and auto-log or remind instead of manual re-entry |
-| 6 | Subscription tracker | Dedicated view of active subscriptions — renewal dates, monthly/annual cost rollup |
-| 7 | Weekly/monthly digest _(agentic)_ | Agent proactively sends a scheduled spending summary — trends, top categories, changes vs. last period |
-| 8 | Mid-month budget coach _(agentic)_ | Agent checks in mid-month, projects end-of-month spend per category, and nudges before you're over budget |
-| 9 | Email receipt inbox _(agentic)_ | Dedicated forwarding address — agent parses receipt emails into line items and logs them automatically, no chat needed |
+### Tier 1 — Quick wins (low complexity, immediate value)
+
+| Feature | Why |
+|---|---|
+| Amount-range filter on `get_expenses` | Answer "expenses over $100" / "anything under $10" style questions |
+| Flagged-expenses filter/tool | Surface everything still flagged for review in one query, instead of asking the agent to remember |
+| Weekly spending pace tool | "Am I on pace this week" — same projection idea as run-rate, at week granularity |
+| Year-over-year comparison tool | "Is dining higher than last June" — currently only month-over-month trend exists |
+
+### Tier 2 — Medium complexity, high value
+
+| Feature | Why |
+|---|---|
+| Recurring expense detection | Detect recurring charges (rent, subscriptions) from history via exact `(description, amount)` grouping + interval-consistency check, instead of manual re-entry every month |
+| Budget limits & alerts | Set per-category monthly budgets; get notified when approaching or exceeding them |
+
+### Tier 3 — Builds on Tier 2
+
+| Feature | Why |
+|---|---|
+| Subscription tracker | Dedicated view of active subscriptions — renewal dates, monthly/annual cost rollup, sourced from recurring-charge detection |
+| Weekly/monthly digest _(agentic)_ | Agent proactively sends a scheduled spending summary — trends, top categories, changes vs. last period |
+
+### Tier 4 — New integration surface (highest complexity)
+
+| Feature | Why |
+|---|---|
+| Email forwarding | Forward order/receipt emails to a dedicated inbox, agent extracts and logs automatically |
+| Family group chat bot | Log expenses from wherever the family already chats (WhatsApp/Telegram), not just the web app |
+| Mid-month budget coach _(agentic)_ | Agent checks in mid-month, projects end-of-month spend per category, and nudges before you're over budget |
+| Email receipt inbox _(agentic)_ | Dedicated forwarding address — agent parses receipt emails into line items and logs them automatically, no chat needed |
+
+### Architecture revamp (lower priority — unblocks scale, no direct user value on its own)
+
+| Item | Why |
+|---|---|
+| Scheduler | Needed for digests, budget coaching, and any time-triggered agentic feature in Tiers 3-4 |
+| Persistent session store | `_sessions` is an in-process dict today — doesn't survive restarts or work across multiple server instances |
+| Async DB driver | Current psycopg2 usage is synchronous; matters once concurrent load or scheduled jobs are added |
+| Migration framework | Schema changes are currently idempotent `CREATE TABLE IF NOT EXISTS` statements run at import time — fine at this scale, won't be later |
+| Push/email delivery infrastructure | Required transport for any proactive notification feature (digests, budget alerts, coaching nudges) |
 
 ---
 
