@@ -201,6 +201,7 @@ export default function Chat({ onExpenseChange, className = "", token, username,
     const fresh = [{ ...INITIAL_MESSAGE, ts: Date.now() }];
     setMessages(fresh);
     localStorage.removeItem(storageKey(username));
+    fetch("/chat/clear", { method: "POST", headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
   };
 
   return (

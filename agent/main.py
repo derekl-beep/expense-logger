@@ -106,6 +106,10 @@ def _run_tools(response_content: list, user_id: int) -> list:
     return tool_results
 
 
+def clear_session(user_id: int) -> None:
+    _sessions.pop(str(user_id), None)
+
+
 def chat(user_input: str, user_id: int, username: str = "user", images: list[dict] | None = None) -> str:
     messages = _sessions.setdefault(str(user_id), [])
     content = _build_user_content(user_input, images)

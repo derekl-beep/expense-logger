@@ -23,7 +23,7 @@ from agent.db import (
     increment_api_call_count,
     update_expense,
 )
-from agent.main import chat, stream_chat
+from agent.main import chat, clear_session, stream_chat
 from agent.tools import SUGGESTED_PROMPTS
 from api.auth import create_token, get_current_user, verify_password
 
@@ -109,6 +109,12 @@ def chat_stream_endpoint(req: ChatRequest, user_id: int = Depends(check_rate_lim
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(generate(), media_type="text/event-stream")
+
+
+@app.post("/chat/clear")
+def chat_clear_endpoint(user_id: int = Depends(get_current_user)):
+    clear_session(user_id)
+    return {"status": "cleared"}
 
 
 @app.get("/health")
