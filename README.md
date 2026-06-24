@@ -12,64 +12,15 @@ A personal expense tracker powered by an AI agent. Describe expenses in plain En
 
 - **Natural language input** — _"$12 lunch at the food court"_ is all you need to type
 - **Agentic decisions** — infers category, resolves vague dates like "yesterday", asks when unclear
-- **Photo → auto-log** — snap a receipt or bank app transaction screenshot, agent OCRs and logs the line items, deduping repeats across overlapping screenshots
+- **Photo → auto-log** — snap a receipt or screenshot; agent OCRs and logs the line items, deduping repeats across overlapping images
 - **Vendor memory** — fuzzy-matches new expenses against past descriptions (Postgres trigram similarity) to reuse a vendor's category instead of asking again
 - **Duplicate detection** — flags same-day, same-amount, similar-description expenses for review instead of silently double-logging
 - **Full CRUD via chat** — update or delete past expenses through conversation
+- **Spending analytics** — category breakdowns, monthly trends, run-rate/weekly-pace projections, YoY comparisons, top expenses, weekday/per-user breakdowns, one-click monthly summary — all computed in SQL, never re-tallied by the model
 - **Live expense table** — updates after every message, filterable by month and flagged status
-- **Spending analytics via chat** — category breakdowns, monthly trends, run-rate projections, top expenses, per-user and weekday breakdowns, all computed in SQL and reported exactly, never re-tallied by the model
-- **Monthly summary** — one-click breakdown by category with observations
 - **CSV export** — download all expenses anytime
 - **Installable on mobile** — add-to-home-screen support, dark mode persisted across sessions
 - **Multi-user** — JWT auth, per-session conversation isolation, shared expense pool
-
----
-
-## Roadmap
-
-Tiered by value added to the user vs. implementation complexity — not strict build order, but higher tiers generally build on capabilities below them.
-
-### Tier 1 — Quick wins (low complexity, immediate value)
-
-| Feature | Why |
-|---|---|
-| Amount-range filter on `get_expenses` | Answer "expenses over $100" / "anything under $10" style questions |
-| Flagged-expenses filter/tool | Surface everything still flagged for review in one query, instead of asking the agent to remember |
-| Weekly spending pace tool | "Am I on pace this week" — same projection idea as run-rate, at week granularity |
-| Year-over-year comparison tool | "Is dining higher than last June" — currently only month-over-month trend exists |
-
-### Tier 2 — Medium complexity, high value
-
-| Feature | Why |
-|---|---|
-| Recurring expense detection | Detect recurring charges (rent, subscriptions) from history via exact `(description, amount)` grouping + interval-consistency check, instead of manual re-entry every month |
-| Budget limits & alerts | Set per-category monthly budgets; get notified when approaching or exceeding them |
-
-### Tier 3 — Builds on Tier 2
-
-| Feature | Why |
-|---|---|
-| Subscription tracker | Dedicated view of active subscriptions — renewal dates, monthly/annual cost rollup, sourced from recurring-charge detection |
-| Weekly/monthly digest _(agentic)_ | Agent proactively sends a scheduled spending summary — trends, top categories, changes vs. last period |
-
-### Tier 4 — New integration surface (highest complexity)
-
-| Feature | Why |
-|---|---|
-| Email forwarding | Forward order/receipt emails to a dedicated inbox, agent extracts and logs automatically |
-| Family group chat bot | Log expenses from wherever the family already chats (WhatsApp/Telegram), not just the web app |
-| Mid-month budget coach _(agentic)_ | Agent checks in mid-month, projects end-of-month spend per category, and nudges before you're over budget |
-| Email receipt inbox _(agentic)_ | Dedicated forwarding address — agent parses receipt emails into line items and logs them automatically, no chat needed |
-
-### Architecture revamp (lower priority — unblocks scale, no direct user value on its own)
-
-| Item | Why |
-|---|---|
-| Scheduler | Needed for digests, budget coaching, and any time-triggered agentic feature in Tiers 3-4 |
-| Persistent session store | `_sessions` is an in-process dict today — doesn't survive restarts or work across multiple server instances |
-| Async DB driver | Current psycopg2 usage is synchronous; matters once concurrent load or scheduled jobs are added |
-| Migration framework | Schema changes are currently idempotent `CREATE TABLE IF NOT EXISTS` statements run at import time — fine at this scale, won't be later |
-| Push/email delivery infrastructure | Required transport for any proactive notification feature (digests, budget alerts, coaching nudges) |
 
 ---
 
@@ -226,3 +177,25 @@ The app is packaged as a single Docker image — FastAPI serves both the API and
 | Constrained output | Category field uses JSON schema `enum` |
 | JWT auth as FastAPI dependency | `api/auth.py` → `Depends(get_current_user)` |
 | API cost guard | `check_rate_limit` dependency on all chat endpoints |
+
+---
+
+## Roadmap
+
+Tiered by value vs. implementation complexity — not strict build order, but higher tiers generally build on capabilities below them. A separate, lower-priority track covers scaling work that unblocks future tiers but adds no direct user value on its own.
+
+| Tier | Feature | Notes |
+|---|---|---|
+| 1 · Quick win | Recurring expense detection | Exact `(description, amount)` grouping + interval-consistency check, instead of manual re-entry every month |
+| 1 · Quick win | Budget limits & alerts | Per-category monthly budgets; notify when approaching or exceeding them |
+| 2 · Builds on Tier 1 | Subscription tracker | Renewal dates, monthly/annual cost rollup — sourced from recurring-charge detection |
+| 2 · Builds on Tier 1 | Weekly/monthly digest _(agentic)_ | Proactive scheduled spending summary — trends, top categories, changes vs. last period |
+| 3 · New integration surface | Email forwarding | Forward order/receipt emails to a dedicated inbox; agent extracts and logs automatically |
+| 3 · New integration surface | Family group chat bot | Log expenses from WhatsApp/Telegram, not just the web app |
+| 3 · New integration surface | Mid-month budget coach _(agentic)_ | Projects end-of-month spend per category, nudges before you're over budget |
+| 3 · New integration surface | Email receipt inbox _(agentic)_ | Dedicated forwarding address — agent parses receipt emails into line items, no chat needed |
+| Architecture | Scheduler | Needed for digests, budget coaching, any time-triggered agentic feature above |
+| Architecture | Persistent session store | `_sessions` is an in-process dict today — doesn't survive restarts or scale across instances |
+| Architecture | Async DB driver | Current psycopg2 usage is synchronous; matters once concurrent load or scheduled jobs are added |
+| Architecture | Migration framework | Schema changes are idempotent `CREATE TABLE IF NOT EXISTS` statements run at import time — fine now, won't scale |
+| Architecture | Push/email delivery infra | Transport for any proactive notification feature (digests, alerts, coaching nudges) |
