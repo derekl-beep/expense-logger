@@ -9,6 +9,8 @@ from agent.db import (
     get_top_expenses,
     get_user_breakdown,
     get_weekday_pattern,
+    get_weekly_pace,
+    get_yoy_comparison,
     save_expense,
     update_expense,
 )
@@ -51,6 +53,9 @@ TOOL_DEFINITIONS = [
                 "end_date":   {"type": "string", "description": "Filter to this ISO date (inclusive)"},
                 "category":   {"type": "string", "description": "Filter by category name"},
                 "logged_by":  {"type": "string", "description": "Filter by the username who logged the expense"},
+                "min_amount": {"type": "number", "description": "Only include expenses with amount >= this value"},
+                "max_amount": {"type": "number", "description": "Only include expenses with amount <= this value"},
+                "flagged":    {"type": "boolean", "description": "Filter to only flagged (true) or only unflagged (false) expenses"},
             },
             "required": [],
         },
@@ -92,6 +97,32 @@ TOOL_DEFINITIONS = [
                 "compare_months": {"type": "integer", "description": "How many prior months to compare against (default 3)"},
             },
             "required": ["category"],
+        },
+    },
+    {
+        "name": "get_weekly_pace",
+        "description": "Project a category's full-week spend from its week-to-date total (week starting Monday), and compare against prior weeks. Use for 'am I on pace this week' / 'is my X spending up vs last week' questions. The projection and comparison are computed exactly — report them as returned.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "category":       {**_category_enum, "description": "Limit to this category; omit for total spending across all categories"},
+                "reference_date": {"type": "string", "description": "ISO date to treat as 'today' (defaults to the actual current date)"},
+                "compare_weeks":  {"type": "integer", "description": "How many prior weeks to compare against (default 3)"},
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "get_yoy_comparison",
+        "description": "Compare a calendar month's spending total to the same calendar month one year earlier. Use for 'is this June higher than last June' style year-over-year questions. Report the totals and percent change exactly as returned.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "category":  {**_category_enum, "description": "Limit to this category; omit for total spending across all categories"},
+                "month":     {"type": "string", "description": "Month to compare, as YYYY-MM (defaults to the current calendar month)"},
+                "logged_by": {"type": "string", "description": "Filter by the username who logged the expense"},
+            },
+            "required": [],
         },
     },
     {
@@ -176,6 +207,8 @@ TOOL_HANDLERS = {
     "get_top_expenses":       get_top_expenses,
     "get_user_breakdown":     get_user_breakdown,
     "get_weekday_pattern":    get_weekday_pattern,
+    "get_weekly_pace":        get_weekly_pace,
+    "get_yoy_comparison":     get_yoy_comparison,
     "update_expense":         update_expense,
     "delete_expense":         delete_expense,
 }

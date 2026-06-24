@@ -12,32 +12,15 @@ A personal expense tracker powered by an AI agent. Describe expenses in plain En
 
 - **Natural language input** — _"$12 lunch at the food court"_ is all you need to type
 - **Agentic decisions** — infers category, resolves vague dates like "yesterday", asks when unclear
+- **Photo → auto-log** — snap a receipt or screenshot; agent OCRs and logs the line items, deduping repeats across overlapping images
 - **Vendor memory** — fuzzy-matches new expenses against past descriptions (Postgres trigram similarity) to reuse a vendor's category instead of asking again
 - **Duplicate detection** — flags same-day, same-amount, similar-description expenses for review instead of silently double-logging
 - **Full CRUD via chat** — update or delete past expenses through conversation
+- **Spending analytics** — category breakdowns, monthly trends, run-rate/weekly-pace projections, YoY comparisons, top expenses, weekday/per-user breakdowns, one-click monthly summary — all computed in SQL, never re-tallied by the model
 - **Live expense table** — updates after every message, filterable by month and flagged status
-- **Monthly summary** — one-click breakdown by category with observations
 - **CSV export** — download all expenses anytime
 - **Installable on mobile** — add-to-home-screen support, dark mode persisted across sessions
 - **Multi-user** — JWT auth, per-session conversation isolation, shared expense pool
-
----
-
-## Roadmap
-
-Coming next, in priority order (each builds on the one before it):
-
-| # | Feature | Why |
-|---|---|---|
-| 1 | Photo → auto-log | Snap a receipt or bank app transaction screenshot, agent extracts and logs the line items |
-| 2 | Email forwarding | Forward order/receipt emails to a dedicated inbox, agent extracts and logs automatically |
-| 3 | Family group chat bot | Log expenses from wherever the family already chats (WhatsApp/Telegram), not just the web app |
-| 4 | Budget limits & alerts | Set per-category monthly budgets; get notified when approaching or exceeding them |
-| 5 | Recurring expense detection | Detect recurring charges (rent, subscriptions) from history and auto-log or remind instead of manual re-entry |
-| 6 | Subscription tracker | Dedicated view of active subscriptions — renewal dates, monthly/annual cost rollup |
-| 7 | Weekly/monthly digest _(agentic)_ | Agent proactively sends a scheduled spending summary — trends, top categories, changes vs. last period |
-| 8 | Mid-month budget coach _(agentic)_ | Agent checks in mid-month, projects end-of-month spend per category, and nudges before you're over budget |
-| 9 | Email receipt inbox _(agentic)_ | Dedicated forwarding address — agent parses receipt emails into line items and logs them automatically, no chat needed |
 
 ---
 
@@ -194,3 +177,25 @@ The app is packaged as a single Docker image — FastAPI serves both the API and
 | Constrained output | Category field uses JSON schema `enum` |
 | JWT auth as FastAPI dependency | `api/auth.py` → `Depends(get_current_user)` |
 | API cost guard | `check_rate_limit` dependency on all chat endpoints |
+
+---
+
+## Roadmap
+
+Tiered by value vs. implementation complexity — not strict build order, but higher tiers generally build on capabilities below them. A separate, lower-priority track covers scaling work that unblocks future tiers but adds no direct user value on its own.
+
+| Tier | Feature | Notes |
+|---|---|---|
+| 1 · Quick win | Recurring expense detection | Exact `(description, amount)` grouping + interval-consistency check, instead of manual re-entry every month |
+| 1 · Quick win | Budget limits & alerts | Per-category monthly budgets; notify when approaching or exceeding them |
+| 2 · Builds on Tier 1 | Subscription tracker | Renewal dates, monthly/annual cost rollup — sourced from recurring-charge detection |
+| 2 · Builds on Tier 1 | Weekly/monthly digest _(agentic)_ | Proactive scheduled spending summary — trends, top categories, changes vs. last period |
+| 3 · New integration surface | Email forwarding | Forward order/receipt emails to a dedicated inbox; agent extracts and logs automatically |
+| 3 · New integration surface | Family group chat bot | Log expenses from WhatsApp/Telegram, not just the web app |
+| 3 · New integration surface | Mid-month budget coach _(agentic)_ | Projects end-of-month spend per category, nudges before you're over budget |
+| 3 · New integration surface | Email receipt inbox _(agentic)_ | Dedicated forwarding address — agent parses receipt emails into line items, no chat needed |
+| Architecture | Scheduler | Needed for digests, budget coaching, any time-triggered agentic feature above |
+| Architecture | Persistent session store | `_sessions` is an in-process dict today — doesn't survive restarts or scale across instances |
+| Architecture | Async DB driver | Current psycopg2 usage is synchronous; matters once concurrent load or scheduled jobs are added |
+| Architecture | Migration framework | Schema changes are idempotent `CREATE TABLE IF NOT EXISTS` statements run at import time — fine now, won't scale |
+| Architecture | Push/email delivery infra | Transport for any proactive notification feature (digests, alerts, coaching nudges) |

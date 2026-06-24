@@ -3,13 +3,16 @@ import { toast } from "sonner";
 import {
   Car, Home, Package, Plane, UtensilsCrossed, Coffee, ShoppingCart, Sofa,
   Film, SprayCan, HeartPulse, Shirt, Phone, Bus, Fuel, Sparkles, Zap, Repeat, X, ArrowUp, MoreHorizontal,
-  Flag, Trash2,
+  Flag, Trash2, Wallet,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerTrigger } from "@/components/ui/drawer";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { useMediaQuery } from "@/hooks/use-media-query";
 
 const CATEGORY_ICONS = {
   "Driving": Car,
@@ -261,29 +264,190 @@ const SwipeableRow = ({ onSwipeLeft, onSwipeRight, children }) => {
   );
 };
 
-const BreakdownRow = ({ category, amount, count, pct, barPct, active, onClick }) => {
+const BreakdownRow = ({ category, amount, count, pct, barPct, limit, maxCategoryTotal, active, onClick }) => {
   const animatedAmount = useAnimatedNumber(amount);
   const animatedPct = useAnimatedNumber(pct);
+
+  const hasBudget = limit != null && maxCategoryTotal > 0;
+  const linePct = hasBudget ? (limit / maxCategoryTotal) * 100 : null;
+  const showLine = hasBudget && linePct <= 100;
+  const usedPct = hasBudget && limit > 0 ? (amount / limit) * 100 : 0;
+  const overBudget = hasBudget && amount > limit;
+
+  const statusLevel = !hasBudget ? "none" : usedPct > 100 ? "over" : usedPct >= 80 ? "near" : "ok";
+  const lineColor = statusLevel === "over" ? "bg-red-500" : statusLevel === "near" ? "bg-amber-500" : "bg-foreground/50";
+  const amountColor = statusLevel === "over"
+    ? "text-red-600 dark:text-red-400"
+    : statusLevel === "near"
+    ? "text-amber-600 dark:text-amber-400"
+    : "text-foreground";
+
+  const baseFillPct = overBudget ? linePct : barPct;
+  const overFillPct = overBudget ? barPct - linePct : 0;
+
+  const tooltipText = hasBudget
+    ? `$${amount.toFixed(2)} of $${limit.toFixed(2)} budget (${usedPct.toFixed(0)}%) — ${count} transaction${count === 1 ? "" : "s"}`
+    : `$${amount.toFixed(2)} across ${count} transaction${count === 1 ? "" : "s"}`;
+
   return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          onClick={onClick}
+          className={`flex items-center gap-2 w-full text-left rounded-md -mx-1 px-1 py-0.5 transition-colors ${
+            active ? "bg-muted" : "hover:bg-muted/50"
+          }`}
+        >
+          <CategoryBadge category={category} small />
+          <span className="text-xs text-foreground w-24 md:w-32 truncate">{category}</span>
+          <div className="relative flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
+            <div
+              className={`absolute inset-y-0 left-0 rounded-full transition-[width] duration-300 ease-out ${CATEGORY_BAR_COLORS[category] ?? "bg-foreground/40"}`}
+              style={{ width: `${baseFillPct}%` }}
+            />
+            {overBudget && (
+              <div
+                className="absolute inset-y-0 rounded-r-full bg-red-500 transition-[width,left] duration-300 ease-out"
+                style={{ left: `${linePct}%`, width: `${overFillPct}%` }}
+              />
+            )}
+            {showLine && (
+              <div
+                className={`absolute inset-y-0 w-px transition-[left,background-color] duration-300 ease-out ${lineColor}`}
+                style={{ left: `${linePct}%` }}
+              />
+            )}
+          </div>
+          <span className="text-xs tabular-nums text-muted-foreground w-9 text-right">{animatedPct.toFixed(0)}%</span>
+          <span className={`text-xs font-medium tabular-nums w-14 text-right transition-colors ${amountColor}`}>${animatedAmount.toFixed(0)}</span>
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="top">{tooltipText}</TooltipContent>
+    </Tooltip>
+  );
+};
+
+const valuesFromBudgetMap = (categories, budgetMap) => {
+  const values = {};
+  categories.forEach((c) => { values[c] = budgetMap[c] != null ? String(budgetMap[c]) : ""; });
+  return values;
+};
+
+const BudgetSettings = ({ categories, budgetMap, authFetch, onSaved }) => {
+  const [values, setValues] = useState(() => valuesFromBudgetMap(categories, budgetMap));
+  const [syncedBudgetMap, setSyncedBudgetMap] = useState(budgetMap);
+
+  if (budgetMap !== syncedBudgetMap) {
+    setSyncedBudgetMap(budgetMap);
+    setValues(valuesFromBudgetMap(categories, budgetMap));
+  }
+
+  const handleBlur = async (category) => {
+    const original = budgetMap[category] ?? null;
+    const trimmed = (values[category] ?? "").trim();
+
+    if (trimmed === "") {
+      if (original == null) return;
+      try {
+        const res = await authFetch(`/budgets/${encodeURIComponent(category)}`, { method: "DELETE" });
+        if (!res.ok) throw new Error();
+        onSaved();
+      } catch {
+        toast.error("Failed to remove budget");
+        setValues((v) => ({ ...v, [category]: String(original) }));
+      }
+      return;
+    }
+
+    const limit = parseFloat(trimmed);
+    if (!Number.isFinite(limit) || limit <= 0) {
+      toast.error("Enter a valid budget amount");
+      setValues((v) => ({ ...v, [category]: original != null ? String(original) : "" }));
+      return;
+    }
+    if (limit === original) return;
+
+    try {
+      const res = await authFetch(`/budgets/${encodeURIComponent(category)}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ monthly_limit: limit }),
+      });
+      if (!res.ok) throw new Error();
+      onSaved();
+    } catch {
+      toast.error("Failed to save budget");
+      setValues((v) => ({ ...v, [category]: original != null ? String(original) : "" }));
+    }
+  };
+
+  return (
+    <div className="space-y-1 max-h-[60vh] overflow-y-auto -mx-1 px-1">
+      {categories.map((category) => (
+        <div key={category} className="flex items-center gap-2 py-1">
+          <CategoryBadge category={category} small />
+          <span className="text-sm text-foreground flex-1 truncate">{category}</span>
+          <div className="relative w-24 shrink-0">
+            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">$</span>
+            <Input
+              type="number"
+              inputMode="decimal"
+              step="1"
+              min="0"
+              placeholder="—"
+              value={values[category] ?? ""}
+              onChange={(e) => setValues((v) => ({ ...v, [category]: e.target.value }))}
+              onBlur={() => handleBlur(category)}
+              className="h-8 text-sm pl-5 text-right"
+            />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+const BudgetDialog = ({ categories, budgetMap, authFetch, onSaved }) => {
+  const [open, setOpen] = useState(false);
+  const isDesktop = useMediaQuery("(min-width: 768px)");
+
+  const trigger = (
     <button
       type="button"
-      title={`$${amount.toFixed(2)} across ${count} transaction${count === 1 ? "" : "s"}`}
-      onClick={onClick}
-      className={`flex items-center gap-2 w-full text-left rounded-md -mx-1 px-1 py-0.5 transition-colors ${
-        active ? "bg-muted" : "hover:bg-muted/50"
-      }`}
+      title="Manage budgets"
+      className="w-7 h-7 flex items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
     >
-      <CategoryBadge category={category} small />
-      <span className="text-xs text-foreground w-24 md:w-32 truncate">{category}</span>
-      <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
-        <div
-          className={`h-full rounded-full transition-[width] duration-300 ease-out ${CATEGORY_BAR_COLORS[category] ?? "bg-foreground/40"}`}
-          style={{ width: `${barPct}%` }}
-        />
-      </div>
-      <span className="text-xs tabular-nums text-muted-foreground w-9 text-right">{animatedPct.toFixed(0)}%</span>
-      <span className="text-xs font-medium tabular-nums text-foreground w-14 text-right">${animatedAmount.toFixed(0)}</span>
+      <Wallet className="w-3.5 h-3.5" />
     </button>
+  );
+
+  const form = <BudgetSettings categories={categories} budgetMap={budgetMap} authFetch={authFetch} onSaved={onSaved} />;
+
+  if (isDesktop) {
+    return (
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogTrigger asChild>{trigger}</DialogTrigger>
+        <DialogContent className="sm:max-w-sm" onOpenAutoFocus={(e) => e.preventDefault()}>
+          <DialogHeader>
+            <DialogTitle className="text-sm font-semibold">Manage Budgets</DialogTitle>
+          </DialogHeader>
+          {form}
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  return (
+    <Drawer open={open} onOpenChange={setOpen}>
+      <DrawerTrigger asChild>{trigger}</DrawerTrigger>
+      <DrawerContent>
+        <DrawerHeader>
+          <DrawerTitle className="text-sm font-semibold">Manage Budgets</DrawerTitle>
+        </DrawerHeader>
+        <div className="px-4 pb-4">{form}</div>
+      </DrawerContent>
+    </Drawer>
   );
 };
 
@@ -299,6 +463,7 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
   const [editingExpense, setEditingExpense] = useState(null);
   const [editValues, setEditValues] = useState({});
   const [categories, setCategories] = useState([]);
+  const [budgets, setBudgets] = useState([]);
   const [overrides, setOverrides] = useState({});
   const [deletedIds, setDeletedIds] = useState(() => new Set());
   const [showAllCategories, setShowAllCategories] = useState(false);
@@ -322,6 +487,15 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
 
   useEffect(() => {
     fetch("/categories").then((r) => r.json()).then(setCategories);
+  }, []);
+
+  const fetchBudgets = () => {
+    authFetch("/budgets").then((r) => r.json()).then(setBudgets);
+  };
+
+  useEffect(() => {
+    fetchBudgets();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const items = useMemo(() => {
@@ -349,12 +523,26 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
   const animatedTotal = useAnimatedNumber(total);
   const emptyMessage = items.length === 0 ? "No expenses yet" : "No expenses match your filters";
 
+  const budgetMap = useMemo(() => {
+    const map = {};
+    budgets.forEach((b) => { map[b.category] = b.monthly_limit; });
+    return map;
+  }, [budgets]);
+
   const categoryTotals = {};
   const categoryCounts = {};
   monthFlagFiltered.forEach((e) => {
     categoryTotals[e.category] = (categoryTotals[e.category] || 0) + e.amount;
     categoryCounts[e.category] = (categoryCounts[e.category] || 0) + 1;
   });
+  if (selectedMonth !== "all") {
+    Object.keys(budgetMap).forEach((category) => {
+      if (!(category in categoryTotals)) {
+        categoryTotals[category] = 0;
+        categoryCounts[category] = 0;
+      }
+    });
+  }
   const categoryGrandTotal = monthFlagFiltered.reduce((sum, e) => sum + e.amount, 0);
   const maxCategoryTotal = Math.max(0, ...Object.values(categoryTotals));
   const breakdown = Object.entries(categoryTotals)
@@ -364,6 +552,7 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
       count: categoryCounts[category],
       pct: categoryGrandTotal ? (amount / categoryGrandTotal) * 100 : 0,
       barPct: maxCategoryTotal ? (amount / maxCategoryTotal) * 100 : 0,
+      limit: selectedMonth !== "all" ? budgetMap[category] : undefined,
     }))
     .sort((a, b) => b.amount - a.amount);
 
@@ -642,9 +831,12 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
         {/* ── Category breakdown ── */}
         {breakdown.length > 0 && (
           <div className={`px-4 py-3 md:px-5 border-b border-border/50 ${searchQuery ? "hidden md:block" : ""}`}>
-            <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Breakdown</div>
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Breakdown</div>
+              <BudgetDialog categories={categories} budgetMap={budgetMap} authFetch={authFetch} onSaved={fetchBudgets} />
+            </div>
             <div className="space-y-1.5">
-              {(showAllCategories ? breakdown : breakdown.slice(0, 5)).map(({ category, amount, count, pct, barPct }) => (
+              {(showAllCategories ? breakdown : breakdown.slice(0, 5)).map(({ category, amount, count, pct, barPct, limit }) => (
                 <BreakdownRow
                   key={category}
                   category={category}
@@ -652,6 +844,8 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
                   count={count}
                   pct={pct}
                   barPct={barPct}
+                  limit={limit}
+                  maxCategoryTotal={maxCategoryTotal}
                   active={categoryFilter === category}
                   onClick={() => setCategoryFilter((c) => (c === category ? null : category))}
                 />
