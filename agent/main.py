@@ -26,8 +26,13 @@ If save_expense returns possible_duplicate_of, it has already flagged both the n
 For every expense, call find_similar_expense with its description (or vendor name) before deciding on a category — do this even if you're already confident what the category should be, since the user may have categorized this vendor differently than you'd assume. If it returns a match with a high score (roughly 0.35+), reuse that match's category directly. If it returns nothing useful, fall back to your own knowledge of the vendor (e.g. you know "Tims" means Tim Hortons, a coffee shop) to pick the best category. Only ask the user if you genuinely cannot infer a category either way.
 
 ## Querying expenses
-When the user asks about spending, call get_expenses with appropriate filters.
-Use logged_by to filter by who logged the expense (e.g. "derek" or "kelly").
+For category/date-range summaries (e.g. "summarize this month", "breakdown by category"), call get_category_breakdown and report its numbers exactly as returned — never tally amounts yourself from get_expenses rows, that's unreliable over more than a couple of items.
+For spending trends across multiple months (e.g. "has my dining spending gone up"), call get_monthly_trend.
+For projections (e.g. "what will I spend on X this month", "is my X run rate higher than last month"), call get_run_rate and report its projected_total and comparison exactly as returned.
+For "where's my money going" or biggest-purchase questions, call get_top_expenses (by_vendor=true to group by vendor, false for individual largest transactions).
+For "who's spending more" questions (this is a shared household tracker), call get_user_breakdown.
+For day-of-week spending pattern questions, call get_weekday_pattern.
+For anything else — finding a specific expense, listing recent transactions, lookups before an update/delete — call get_expenses with appropriate filters. Use logged_by to filter by who logged the expense (e.g. "derek" or "kelly").
 Present results clearly with a total where useful.
 
 ## Editing and flagging
@@ -99,6 +104,10 @@ def _run_tools(response_content: list, user_id: int) -> list:
                 "content": str(result),
             })
     return tool_results
+
+
+def clear_session(user_id: int) -> None:
+    _sessions.pop(str(user_id), None)
 
 
 def chat(user_input: str, user_id: int, username: str = "user", images: list[dict] | None = None) -> str:

@@ -219,14 +219,29 @@ const SwipeableRow = ({ onSwipeLeft, onSwipeRight, children }) => {
     setDx(0);
   };
 
+  const pastRight = dx >= SWIPE_THRESHOLD;
+  const pastLeft = dx <= -SWIPE_THRESHOLD;
+
   return (
     <div className="relative overflow-hidden">
       <div className="absolute inset-0 flex items-stretch justify-between">
-        <div className="flex items-center justify-start pl-4 bg-amber-500 text-white" style={{ width: SWIPE_MAX }}>
-          <Flag className="w-4 h-4" />
+        <div
+          className={`flex items-center justify-start pl-4 text-white transition-colors duration-150 ${pastRight ? "bg-amber-600" : "bg-amber-500"}`}
+          style={{ width: SWIPE_MAX }}
+        >
+          <Flag
+            className="w-4 h-4 transition-transform duration-150"
+            style={{ transform: pastRight ? "scale(1.4)" : "scale(1)" }}
+          />
         </div>
-        <div className="flex items-center justify-end pr-4 bg-destructive text-destructive-foreground" style={{ width: SWIPE_MAX }}>
-          <Trash2 className="w-4 h-4" />
+        <div
+          className="flex items-center justify-end pr-4 bg-destructive text-destructive-foreground transition-colors duration-150"
+          style={{ width: SWIPE_MAX, filter: pastLeft ? "brightness(1.25)" : "none" }}
+        >
+          <Trash2
+            className="w-4 h-4 transition-transform duration-150"
+            style={{ transform: pastLeft ? "scale(1.4)" : "scale(1)" }}
+          />
         </div>
       </div>
       <div
@@ -290,6 +305,7 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
   const [categoryFilter, setCategoryFilter] = useState(null);
   const [userFilter, setUserFilter] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
   const pendingDeletes = useRef({});
   const listRef = useRef(null);
   const [showScrollToTop, setShowScrollToTop] = useState(false);
@@ -435,6 +451,11 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
     setEditingExpense(null);
   };
 
+  const confirmSwipeDelete = () => {
+    deleteExpenseById(deleteConfirm.id);
+    setDeleteConfirm(null);
+  };
+
   const exportCSV = async () => {
     const res = await authFetch("/expenses/export");
     const blob = await res.blob();
@@ -514,6 +535,22 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
               <Button variant="outline" size="sm" className="text-xs" onClick={() => setEditingExpense(null)}>Cancel</Button>
               <Button size="sm" className="text-xs" onClick={saveEdit}>Save</Button>
             </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Swipe-to-delete confirmation — mobile only */}
+      <Dialog open={!!deleteConfirm} onOpenChange={(open) => { if (!open) setDeleteConfirm(null); }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-sm font-semibold">Delete Expense</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground py-1">
+            Delete "{deleteConfirm?.description}" — ${deleteConfirm?.amount.toFixed(2)}?
+          </p>
+          <DialogFooter className="flex-row gap-2 sm:justify-end">
+            <Button variant="outline" size="sm" className="text-xs" onClick={() => setDeleteConfirm(null)}>Cancel</Button>
+            <Button variant="destructive" size="sm" className="text-xs" onClick={confirmSwipeDelete}>Delete</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -648,7 +685,7 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
                 <span className="text-xs font-medium text-muted-foreground">{formatSectionDate(date)}</span>
               </div>
               {items.map((e) => (
-                <SwipeableRow key={e.id} onSwipeRight={() => toggleFlag(e)} onSwipeLeft={() => deleteExpenseById(e.id)}>
+                <SwipeableRow key={e.id} onSwipeRight={() => toggleFlag(e)} onSwipeLeft={() => setDeleteConfirm(e)}>
                   <div className="flex items-center gap-3 px-4 py-3 border-b border-border/50 active:bg-muted transition-colors cursor-pointer" onClick={() => openEdit(e)}>
                     <CategoryBadge
                       category={e.category}

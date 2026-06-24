@@ -1,4 +1,6 @@
+import calendar
 import os
+from datetime import date, timedelta
 
 import psycopg2
 import psycopg2.extras
@@ -171,6 +173,206 @@ def get_expenses(start_date: str = None, end_date: str = None, category: str = N
     query += " ORDER BY e.date DESC, e.id DESC"
     cur = _run(query, params)
     return [_row(r) for r in cur.fetchall()]
+
+
+def _shift_month(d: date, delta: int) -> date:
+    """First-of-month date `delta` months from `d` (delta may be negative)."""
+    total = d.year * 12 + (d.month - 1) + delta
+    year, month = divmod(total, 12)
+    return date(year, month + 1, 1)
+
+
+def get_category_breakdown(start_date: str = None, end_date: str = None, logged_by: str = None) -> dict:
+    query = """
+        SELECT e.category, SUM(e.amount) AS total, COUNT(*) AS count
+        FROM expenses e
+        LEFT JOIN users u ON e.user_id = u.id
+        WHERE 1=1
+    """
+    params = []
+    if start_date:
+        query += " AND e.date >= %s"
+        params.append(start_date)
+    if end_date:
+        query += " AND e.date <= %s"
+        params.append(end_date)
+    if logged_by:
+        query += " AND LOWER(u.username) = LOWER(%s)"
+        params.append(logged_by)
+    query += " GROUP BY e.category ORDER BY total DESC"
+    cur = _run(query, params)
+    breakdown = [{"category": r["category"], "total": float(r["total"]), "count": r["count"]} for r in cur.fetchall()]
+    grand_total = round(sum(r["total"] for r in breakdown), 2)
+    for r in breakdown:
+        r["pct"] = round(r["total"] / grand_total * 100, 1) if grand_total else 0.0
+    return {"breakdown": breakdown, "grand_total": grand_total}
+
+
+def get_monthly_trend(category: str = None, months: int = 6, logged_by: str = None) -> list[dict]:
+    start = _shift_month(date.today().replace(day=1), -(months - 1))
+    query = """
+        SELECT date_trunc('month', e.date)::date AS month, SUM(e.amount) AS total, COUNT(*) AS count
+        FROM expenses e
+        LEFT JOIN users u ON e.user_id = u.id
+        WHERE e.date >= %s
+    """
+    params = [start.isoformat()]
+    if category:
+        query += " AND LOWER(e.category) = LOWER(%s)"
+        params.append(category)
+    if logged_by:
+        query += " AND LOWER(u.username) = LOWER(%s)"
+        params.append(logged_by)
+    query += " GROUP BY month ORDER BY month"
+    cur = _run(query, params)
+    return [{"month": str(r["month"])[:7], "total": float(r["total"]), "count": r["count"]} for r in cur.fetchall()]
+
+
+def get_run_rate(category: str, reference_date: str = None, compare_months: int = 3) -> dict:
+    ref = date.fromisoformat(reference_date) if reference_date else date.today()
+    month_start = ref.replace(day=1)
+    days_in_month = calendar.monthrange(ref.year, ref.month)[1]
+    days_elapsed = ref.day
+
+    cur = _run(
+        "SELECT COALESCE(SUM(amount), 0) AS total FROM expenses WHERE LOWER(category) = LOWER(%s) AND date >= %s AND date <= %s",
+        (category, month_start.isoformat(), ref.isoformat()),
+    )
+    spent_so_far = float(cur.fetchone()["total"])
+    projected_total = round(spent_so_far / days_elapsed * days_in_month, 2) if days_elapsed else 0.0
+
+    prior_months = []
+    for i in range(1, compare_months + 1):
+        m_start = _shift_month(month_start, -i)
+        m_end = _shift_month(month_start, -i + 1) - timedelta(days=1)
+        cur = _run(
+            "SELECT COALESCE(SUM(amount), 0) AS total FROM expenses WHERE LOWER(category) = LOWER(%s) AND date >= %s AND date <= %s",
+            (category, m_start.isoformat(), m_end.isoformat()),
+        )
+        prior_months.append({"month": m_start.isoformat()[:7], "total": float(cur.fetchone()["total"])})
+
+    last_month_total = prior_months[0]["total"] if prior_months else None
+    pct_change_vs_last_month = (
+        round((projected_total - last_month_total) / last_month_total * 100, 1)
+        if last_month_total else None
+    )
+
+    return {
+        "category": category,
+        "current_month": month_start.isoformat()[:7],
+        "spent_so_far": spent_so_far,
+        "days_elapsed": days_elapsed,
+        "days_in_month": days_in_month,
+        "projected_total": projected_total,
+        "prior_months": prior_months,
+        "pct_change_vs_last_month": pct_change_vs_last_month,
+    }
+
+
+def get_top_expenses(
+    start_date: str = None,
+    end_date: str = None,
+    category: str = None,
+    logged_by: str = None,
+    limit: int = 5,
+    by_vendor: bool = False,
+) -> list[dict]:
+    params = []
+    if by_vendor:
+        query = """
+            SELECT e.description, SUM(e.amount) AS total, COUNT(*) AS count
+            FROM expenses e
+            LEFT JOIN users u ON e.user_id = u.id
+            WHERE 1=1
+        """
+    else:
+        query = """
+            SELECT e.id, e.amount, e.category, e.description, e.date, u.username AS logged_by
+            FROM expenses e
+            LEFT JOIN users u ON e.user_id = u.id
+            WHERE 1=1
+        """
+    if start_date:
+        query += " AND e.date >= %s"
+        params.append(start_date)
+    if end_date:
+        query += " AND e.date <= %s"
+        params.append(end_date)
+    if category:
+        query += " AND LOWER(e.category) = LOWER(%s)"
+        params.append(category)
+    if logged_by:
+        query += " AND LOWER(u.username) = LOWER(%s)"
+        params.append(logged_by)
+
+    if by_vendor:
+        query += " GROUP BY e.description ORDER BY total DESC LIMIT %s"
+        params.append(limit)
+        cur = _run(query, params)
+        return [{"description": r["description"], "total": float(r["total"]), "count": r["count"]} for r in cur.fetchall()]
+
+    query += " ORDER BY e.amount DESC LIMIT %s"
+    params.append(limit)
+    cur = _run(query, params)
+    return [_row(r) for r in cur.fetchall()]
+
+
+def get_user_breakdown(start_date: str = None, end_date: str = None, category: str = None) -> list[dict]:
+    query = """
+        SELECT u.username AS logged_by, SUM(e.amount) AS total, COUNT(*) AS count
+        FROM expenses e
+        LEFT JOIN users u ON e.user_id = u.id
+        WHERE 1=1
+    """
+    params = []
+    if start_date:
+        query += " AND e.date >= %s"
+        params.append(start_date)
+    if end_date:
+        query += " AND e.date <= %s"
+        params.append(end_date)
+    if category:
+        query += " AND LOWER(e.category) = LOWER(%s)"
+        params.append(category)
+    query += " GROUP BY u.username ORDER BY total DESC"
+    cur = _run(query, params)
+    return [{"logged_by": r["logged_by"], "total": float(r["total"]), "count": r["count"]} for r in cur.fetchall()]
+
+
+_WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+
+
+def get_weekday_pattern(start_date: str = None, end_date: str = None, category: str = None, logged_by: str = None) -> list[dict]:
+    query = """
+        SELECT EXTRACT(DOW FROM e.date)::int AS dow, SUM(e.amount) AS total, COUNT(*) AS count
+        FROM expenses e
+        LEFT JOIN users u ON e.user_id = u.id
+        WHERE 1=1
+    """
+    params = []
+    if start_date:
+        query += " AND e.date >= %s"
+        params.append(start_date)
+    if end_date:
+        query += " AND e.date <= %s"
+        params.append(end_date)
+    if category:
+        query += " AND LOWER(e.category) = LOWER(%s)"
+        params.append(category)
+    if logged_by:
+        query += " AND LOWER(u.username) = LOWER(%s)"
+        params.append(logged_by)
+    query += " GROUP BY dow ORDER BY dow"
+    cur = _run(query, params)
+    rows = {r["dow"]: r for r in cur.fetchall()}
+    return [
+        {
+            "weekday": _WEEKDAY_NAMES[d],
+            "total": float(rows[d]["total"]) if d in rows else 0.0,
+            "count": rows[d]["count"] if d in rows else 0,
+        }
+        for d in range(7)
+    ]
 
 
 def update_expense(

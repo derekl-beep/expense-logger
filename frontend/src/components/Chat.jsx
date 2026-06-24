@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { ArrowDown, ArrowUp, ImagePlus, MoreHorizontal } from "lucide-react";
+import { ArrowDown, ArrowUp, ImagePlus, MessageSquarePlus, MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -46,6 +46,11 @@ export default function Chat({ onExpenseChange, className = "", token, username,
   const fileInputRef = useRef(null);
   const messagesContainerRef = useRef(null);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+  const [suggestions, setSuggestions] = useState([]);
+
+  useEffect(() => {
+    fetch("/chat/suggestions").then((r) => r.json()).then(setSuggestions).catch(() => {});
+  }, []);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -196,6 +201,7 @@ export default function Chat({ onExpenseChange, className = "", token, username,
     const fresh = [{ ...INITIAL_MESSAGE, ts: Date.now() }];
     setMessages(fresh);
     localStorage.removeItem(storageKey(username));
+    fetch("/chat/clear", { method: "POST", headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
   };
 
   return (
@@ -213,6 +219,15 @@ export default function Chat({ onExpenseChange, className = "", token, username,
           <Button variant="outline" size="sm" className="h-7 text-xs" onClick={sendMonthlySummary} disabled={loading}>
             This Month
           </Button>
+          <button
+            onClick={clearChat}
+            disabled={loading}
+            title="New chat"
+            aria-label="New chat"
+            className="w-7 h-7 flex items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors disabled:opacity-50"
+          >
+            <MessageSquarePlus className="w-4 h-4" />
+          </button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button className="w-7 h-7 flex items-center justify-center rounded-md text-muted-foreground hover:bg-muted transition-colors">
@@ -222,9 +237,6 @@ export default function Chat({ onExpenseChange, className = "", token, username,
             <DropdownMenuContent align="end" className="w-40">
               <DropdownMenuItem onClick={onToggleDark} className="text-xs cursor-pointer">
                 {dark ? "Light mode" : "Dark mode"}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={clearChat} disabled={loading} className="text-xs cursor-pointer">
-                Clear chat
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={onLogout} className="text-xs cursor-pointer text-destructive focus:text-destructive">
@@ -262,6 +274,19 @@ export default function Chat({ onExpenseChange, className = "", token, username,
             </div>
           </div>
         ))}
+        {messages.length === 1 && suggestions.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 pl-1">
+            {suggestions.map((s) => (
+              <button
+                key={s.label}
+                onClick={() => sendMessage(s.prompt, s.label)}
+                className="text-xs px-3 py-1.5 rounded-full border border-input text-foreground hover:bg-muted transition-colors"
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+        )}
         {loading && (
           <div className="flex justify-start">
             <div className="bg-muted text-muted-foreground text-sm px-3.5 py-2.5 rounded-2xl rounded-bl-sm italic">
