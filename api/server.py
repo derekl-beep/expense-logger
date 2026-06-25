@@ -20,6 +20,7 @@ from agent.db import (
     get_api_call_count,
     get_budgets,
     get_expenses,
+    get_recurring_expenses,
     get_user_by_id,
     get_user_by_username,
     increment_api_call_count,
@@ -133,6 +134,11 @@ def expenses_endpoint(user_id: int = Depends(get_current_user)):
 @app.get("/categories")
 def categories_endpoint():
     return CATEGORIES
+
+
+@app.get("/expenses/recurring")
+def recurring_expenses_endpoint(user_id: int = Depends(get_current_user)):
+    return get_recurring_expenses()
 
 
 class BudgetRequest(BaseModel):

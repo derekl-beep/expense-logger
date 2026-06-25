@@ -479,6 +479,67 @@ def get_weekday_pattern(start_date: str = None, end_date: str = None, category: 
     ]
 
 
+_RECURRING_FREQUENCIES = [
+    ("weekly", 7, 2),
+    ("biweekly", 14, 3),
+    ("monthly", 30, 5),
+    ("yearly", 365, 15),
+]
+
+
+def _classify_frequency(avg_gap_days: float) -> str | None:
+    best_label, best_diff = None, None
+    for label, days, tolerance in _RECURRING_FREQUENCIES:
+        diff = abs(avg_gap_days - days)
+        if diff <= tolerance and (best_diff is None or diff < best_diff):
+            best_label, best_diff = label, diff
+    return best_label
+
+
+def get_recurring_expenses() -> list[dict]:
+    """Detect recurring charges: same (description, amount) appearing >=3 times at a consistent interval."""
+    query = """
+        WITH gaps AS (
+            SELECT
+                description,
+                amount,
+                category,
+                date,
+                date - LAG(date) OVER (PARTITION BY description, amount ORDER BY date) AS gap_days
+            FROM expenses
+        )
+        SELECT
+            description, amount, category,
+            COUNT(*) AS occurrences,
+            MAX(date) AS last_date,
+            AVG(gap_days) AS avg_gap,
+            STDDEV(gap_days) AS stddev_gap
+        FROM gaps
+        GROUP BY description, amount, category
+        HAVING COUNT(*) >= 3
+        ORDER BY amount DESC
+    """
+    cur = _run(query)
+    results = []
+    for r in cur.fetchall():
+        avg_gap = float(r["avg_gap"])
+        stddev_gap = float(r["stddev_gap"] or 0)
+        if stddev_gap > avg_gap * 0.25:
+            continue
+        frequency = _classify_frequency(avg_gap)
+        if not frequency:
+            continue
+        results.append({
+            "description": r["description"],
+            "amount": float(r["amount"]),
+            "category": r["category"],
+            "occurrences": r["occurrences"],
+            "last_date": str(r["last_date"]),
+            "frequency": frequency,
+        })
+    return results
+
+
 def update_expense(
     id: int,
     amount: float = None,
