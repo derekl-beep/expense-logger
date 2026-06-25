@@ -22,7 +22,11 @@ export default defineConfig({
       cwd: "..",
       url: "http://127.0.0.1:8000/health",
       reuseExistingServer: false,
-      env: { ANTHROPIC_API_KEY: "dummy", DATABASE_URL: TEST_DATABASE_URL },
+      env: {
+        ANTHROPIC_API_KEY: "dummy",
+        DATABASE_URL: TEST_DATABASE_URL,
+        JWT_SECRET: process.env.JWT_SECRET ?? "test-secret",
+      },
       timeout: 30_000,
     },
     {
