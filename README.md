@@ -208,6 +208,7 @@ Tiered by value vs. implementation complexity — not strict build order, but hi
 | 3 · New integration surface | Family group chat bot | Log expenses from WhatsApp/Telegram, not just the web app |
 | 3 · New integration surface | Mid-month budget coach _(agentic)_ | Projects end-of-month spend per category, nudges before you're over budget |
 | 3 · New integration surface | Email receipt inbox _(agentic)_ | Dedicated forwarding address — agent parses receipt emails into line items, no chat needed |
+| 3 · New integration surface | Voice message input _(agentic)_ | Mic button records mixed English/Cantonese speech; server-side ASR (likely Google Cloud Speech-to-Text for its code-switching support over Whisper) transcribes without forcing a single language, then the raw transcript is fed into the existing chat loop as a normal user message — Claude translates to English and extracts fields using its existing tool-calling flow, asking a clarifying question in-thread instead of guessing when the translation or amount/category is ambiguous; no separate confirmation UI needed since it's just another chat turn |
 | Architecture | Scheduler | Needed for digests, budget coaching, any time-triggered agentic feature above |
 | Architecture | Persistent session store | `_sessions` is an in-process dict today — doesn't survive restarts or scale across instances |
 | Architecture | Async DB driver | Current psycopg2 usage is synchronous; matters once concurrent load or scheduled jobs are added |
