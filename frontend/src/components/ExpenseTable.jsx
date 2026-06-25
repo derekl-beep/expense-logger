@@ -529,10 +529,11 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
   const monthFlagFiltered = items
     .filter((e) => selectedMonth === "all" || e.date.startsWith(selectedMonth))
     .filter((e) => !flaggedOnly || e.flagged);
-  const filtered = monthFlagFiltered
-    .filter((e) => !categoryFilter || e.category === categoryFilter)
+  const userSearchFiltered = monthFlagFiltered
     .filter((e) => !userFilter || e.logged_by === userFilter)
     .filter((e) => !searchQuery || e.description.toLowerCase().includes(searchQuery.trim().toLowerCase()));
+  const filtered = userSearchFiltered
+    .filter((e) => !categoryFilter || e.category === categoryFilter);
   const total = filtered.reduce((sum, e) => sum + e.amount, 0);
   const animatedTotal = useAnimatedNumber(total);
   const emptyMessage = items.length === 0 ? "No expenses yet" : "No expenses match your filters";
@@ -545,11 +546,11 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
 
   const categoryTotals = {};
   const categoryCounts = {};
-  monthFlagFiltered.forEach((e) => {
+  userSearchFiltered.forEach((e) => {
     categoryTotals[e.category] = (categoryTotals[e.category] || 0) + e.amount;
     categoryCounts[e.category] = (categoryCounts[e.category] || 0) + 1;
   });
-  const categoryGrandTotal = monthFlagFiltered.reduce((sum, e) => sum + e.amount, 0);
+  const categoryGrandTotal = userSearchFiltered.reduce((sum, e) => sum + e.amount, 0);
   const maxCategoryTotal = Math.max(0, ...Object.values(categoryTotals));
   const breakdown = Object.entries(categoryTotals)
     .map(([category, amount]) => ({
@@ -709,7 +710,12 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
               <label className="text-xs text-muted-foreground mb-1 block">Category</label>
               <Select value={editValues.category} onValueChange={(v) => setEditValues({ ...editValues, category: v })}>
                 <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
-                <SelectContent>{categories.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                <SelectContent>
+                  {editValues.category && !categories.includes(editValues.category) && (
+                    <SelectItem value={editValues.category}>{editValues.category} (unrecognized)</SelectItem>
+                  )}
+                  {categories.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                </SelectContent>
               </Select>
             </div>
             <button
@@ -841,7 +847,7 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
 
         {/* ── Category breakdown ── */}
         {breakdown.length > 0 && (
-          <div className={`px-4 py-3 md:px-5 border-b border-border/50 ${searchQuery ? "hidden md:block" : ""}`}>
+          <div className="px-4 py-3 md:px-5 border-b border-border/50">
             <div className="flex items-center justify-between mb-2">
               <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Breakdown</div>
               <BudgetDialog categories={categories} budgetMap={budgetMap} authFetch={authFetch} onSaved={fetchBudgets} />
