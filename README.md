@@ -201,6 +201,7 @@ Tiered by value vs. implementation complexity — not strict build order, but hi
 |---|---|---|
 | 1 · Quick win | Recurring expense detection | Exact `(description, amount)` grouping + interval-consistency check, instead of manual re-entry every month |
 | 1 · Quick win | Budget limits & alerts | Per-category monthly budgets; notify when approaching or exceeding them |
+| 2 · Builds on Tier 1 | Frequent vendor insights _(agentic)_ | New `vendor` column extracted/normalized by the agent at save time (reusing the existing trigram vendor-recall for consistent spelling), surfaced as a ranked-by-frequency-and-total breakdown with a per-vendor ignore list (e.g. hide "Landlord"); backfill existing rows via a one-off script parsing the `"[What] at [Venue]"` description convention |
 | 2 · Builds on Tier 1 | Subscription tracker | Renewal dates, monthly/annual cost rollup — sourced from recurring-charge detection |
 | 2 · Builds on Tier 1 | Weekly/monthly digest _(agentic)_ | Proactive scheduled spending summary — trends, top categories, changes vs. last period |
 | 3 · New integration surface | Email forwarding | Forward order/receipt emails to a dedicated inbox; agent extracts and logs automatically |
