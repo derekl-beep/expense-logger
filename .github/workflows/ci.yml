@@ -41,7 +41,7 @@ jobs:
           --health-retries 5
     steps:
       - uses: actions/checkout@v5
-      - uses: astral-sh/setup-uv@v8
+      - uses: astral-sh/setup-uv@v8.2.0
         with:
           enable-cache: true
       - run: uv sync
@@ -74,7 +74,7 @@ jobs:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/expense_logger_test
     steps:
       - uses: actions/checkout@v5
-      - uses: astral-sh/setup-uv@v8
+      - uses: astral-sh/setup-uv@v8.2.0
         with:
           enable-cache: true
       - run: uv sync
@@ -89,7 +89,7 @@ jobs:
         working-directory: frontend
       - run: npx playwright test
         working-directory: frontend
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: playwright-report
