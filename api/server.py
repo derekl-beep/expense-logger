@@ -11,7 +11,7 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from agent.categories import CATEGORIES
 from agent.db import (
@@ -171,6 +171,13 @@ class UpdateRequest(BaseModel):
     description: str = None
     date: str = None
     flagged: bool = None
+
+    @field_validator("category")
+    @classmethod
+    def validate_category(cls, v):
+        if v is not None and v not in CATEGORIES:
+            raise ValueError(f"Invalid category: {v}")
+        return v
 
 
 @app.patch("/expenses/{id}")

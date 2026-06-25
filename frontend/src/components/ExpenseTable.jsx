@@ -8,8 +8,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
-import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerTrigger } from "@/components/ui/drawer";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerTrigger } from "@/components/ui/drawer";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useMediaQuery } from "@/hooks/use-media-query";
@@ -442,6 +442,7 @@ const BudgetDialog = ({ categories, budgetMap, authFetch, onSaved }) => {
         <DialogContent className="sm:max-w-sm" onOpenAutoFocus={(e) => e.preventDefault()}>
           <DialogHeader>
             <DialogTitle className="text-sm font-semibold">Manage Budgets</DialogTitle>
+            <DialogDescription className="sr-only">Set monthly spending limits per category</DialogDescription>
           </DialogHeader>
           {form}
         </DialogContent>
@@ -455,6 +456,7 @@ const BudgetDialog = ({ categories, budgetMap, authFetch, onSaved }) => {
       <DrawerContent>
         <DrawerHeader>
           <DrawerTitle className="text-sm font-semibold">Manage Budgets</DrawerTitle>
+          <DrawerDescription className="sr-only">Set monthly spending limits per category</DrawerDescription>
         </DrawerHeader>
         <div className="px-4 pb-4">{form}</div>
       </DrawerContent>
@@ -589,13 +591,17 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
   const saveEdit = async () => {
     const id = editingExpense.id;
     const original = items.find((x) => x.id === id);
+    const changes = {};
+    for (const key of ["amount", "category", "description", "date", "flagged"]) {
+      if (editValues[key] !== editingExpense[key]) changes[key] = editValues[key];
+    }
     setOverrides((prev) => ({ ...prev, [id]: { ...prev[id], ...editValues } }));
     setEditingExpense(null);
     try {
       const res = await authFetch(`/expenses/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(editValues),
+        body: JSON.stringify(changes),
       });
       if (!res.ok) throw new Error();
       toast.success("Expense updated");
@@ -671,6 +677,7 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
         <DialogContent className="sm:max-w-sm" onOpenAutoFocus={(e) => e.preventDefault()}>
           <DialogHeader>
             <DialogTitle className="text-sm font-semibold">Edit Expense</DialogTitle>
+            <DialogDescription className="sr-only">Edit the details of this expense</DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-1">
             <div>
@@ -745,10 +752,10 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle className="text-sm font-semibold">Delete Expense</DialogTitle>
+            <DialogDescription className="text-sm text-muted-foreground py-1">
+              Delete "{deleteConfirm?.description}" — ${deleteConfirm?.amount.toFixed(2)}?
+            </DialogDescription>
           </DialogHeader>
-          <p className="text-sm text-muted-foreground py-1">
-            Delete "{deleteConfirm?.description}" — ${deleteConfirm?.amount.toFixed(2)}?
-          </p>
           <DialogFooter className="flex-row gap-2 sm:justify-end">
             <Button variant="outline" size="sm" className="text-xs" onClick={() => setDeleteConfirm(null)}>Cancel</Button>
             <Button variant="destructive" size="sm" className="text-xs" onClick={confirmSwipeDelete}>Delete</Button>
