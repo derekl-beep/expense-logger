@@ -41,7 +41,7 @@ jobs:
           --health-retries 5
     steps:
       - uses: actions/checkout@v5
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v8
         with:
           enable-cache: true
       - run: uv sync
@@ -74,7 +74,7 @@ jobs:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/expense_logger_test
     steps:
       - uses: actions/checkout@v5
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v8
         with:
           enable-cache: true
       - run: uv sync
