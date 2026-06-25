@@ -796,7 +796,7 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
           </span>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="w-8 h-8 flex items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-muted transition-colors">
+              <button className="w-7 h-7 flex items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
                 <MoreHorizontal className="w-4 h-4" />
               </button>
             </DropdownMenuTrigger>

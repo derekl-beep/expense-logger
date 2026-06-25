@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { ArrowDown, ArrowUp, ImagePlus, MessageSquarePlus, MoreHorizontal } from "lucide-react";
+import { ArrowDown, ArrowUp, Bot, ImagePlus, MessageSquarePlus, MoreHorizontal, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -251,7 +251,12 @@ export default function Chat({ onExpenseChange, className = "", token, username,
       <div className="relative flex-1 overflow-hidden">
       <div ref={messagesContainerRef} onScroll={handleMessagesScroll} className="h-full overflow-y-auto overscroll-contain p-4 flex flex-col gap-3">
         {messages.map((m, i) => (
-          <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+          <div key={i} className={`flex items-end gap-2 ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+            {m.role === "agent" && (
+              <div className="shrink-0 w-7 h-7 rounded-full bg-muted text-muted-foreground flex items-center justify-center">
+                <Bot className="w-4 h-4" />
+              </div>
+            )}
             <div className={`max-w-[85%] px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed ${
               m.role === "user"
                 ? "bg-primary text-primary-foreground rounded-br-sm"
@@ -272,6 +277,11 @@ export default function Chat({ onExpenseChange, className = "", token, username,
                   </div>
                 : m.text}
             </div>
+            {m.role === "user" && (
+              <div className="shrink-0 w-7 h-7 rounded-full bg-primary/10 text-primary flex items-center justify-center">
+                <User className="w-4 h-4" />
+              </div>
+            )}
           </div>
         ))}
         {messages.length === 1 && suggestions.length > 0 && (
@@ -288,7 +298,10 @@ export default function Chat({ onExpenseChange, className = "", token, username,
           </div>
         )}
         {loading && (
-          <div className="flex justify-start">
+          <div className="flex items-end gap-2 justify-start">
+            <div className="shrink-0 w-7 h-7 rounded-full bg-muted text-muted-foreground flex items-center justify-center">
+              <Bot className="w-4 h-4" />
+            </div>
             <div className="bg-muted text-muted-foreground text-sm px-3.5 py-2.5 rounded-2xl rounded-bl-sm italic">
               Thinking…
             </div>
