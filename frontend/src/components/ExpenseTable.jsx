@@ -546,14 +546,6 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
     categoryTotals[e.category] = (categoryTotals[e.category] || 0) + e.amount;
     categoryCounts[e.category] = (categoryCounts[e.category] || 0) + 1;
   });
-  if (selectedMonth !== "all") {
-    Object.keys(budgetMap).forEach((category) => {
-      if (!(category in categoryTotals)) {
-        categoryTotals[category] = 0;
-        categoryCounts[category] = 0;
-      }
-    });
-  }
   const categoryGrandTotal = monthFlagFiltered.reduce((sum, e) => sum + e.amount, 0);
   const maxCategoryTotal = Math.max(0, ...Object.values(categoryTotals));
   const breakdown = Object.entries(categoryTotals)

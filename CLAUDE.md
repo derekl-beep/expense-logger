@@ -20,7 +20,13 @@ npm run build     # production build -> frontend/dist (served by FastAPI)
 npm run lint       # eslint
 ```
 
-There are no automated tests in this repo (no test suite exists for backend or frontend).
+Tests:
+```bash
+uv run pytest tests/                          # backend unit tests (agent/db.py), from repo root
+cd frontend && npm run test:e2e               # Playwright e2e suite (login, breakdown, budgets)
+cd frontend && npx playwright test e2e/login.spec.js   # run a single e2e spec file
+```
+Backend tests run against `expense_logger_test` (set via `DATABASE_URL`, defaults to `postgresql://postgres:postgres@localhost:5432/expense_logger_test` — see `tests/conftest.py`), truncated and reseeded per-test via an autouse fixture. The e2e suite's Playwright config auto-starts both servers and seeds the same test database from `scripts/seed_e2e_data.py` (deterministic, idempotent — see that file for the fixed login/categories/budgets it sets up). Both are isolated from the real dev `expense_logger` database.
 
 ## Architecture
 
