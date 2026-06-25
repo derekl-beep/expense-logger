@@ -214,3 +214,6 @@ Tiered by value vs. implementation complexity — not strict build order, but hi
 | Architecture | Async DB driver | Current psycopg2 usage is synchronous; matters once concurrent load or scheduled jobs are added |
 | Architecture | Migration framework | Schema changes are idempotent `CREATE TABLE IF NOT EXISTS` statements run at import time — fine now, won't scale |
 | Architecture | Push/email delivery infra | Transport for any proactive notification feature (digests, alerts, coaching nudges) |
+| Architecture | Per-tenant budgets | `budgets` table has no `user_id` — it's global across all users today, so two tenants would overwrite each other's budgets; needs a `(user_id, category)` composite key. Blocking bug for a multi-tenant rollout, not just a nice-to-have |
+| Architecture | DB connection pooling | `agent/db.py` uses a single lazy global autocommit connection — fine for one process today, but needs per-request connections/a pool before real concurrent multi-tenant load. Also a prerequisite for the RLS item below, since scoping a session variable per tenant needs a per-request connection |
+| Architecture | Row-level security (RLS) | Postgres RLS policies on `expenses`/`budgets`/`api_calls` scoped to `user_id`, as a safety net so a missing `WHERE user_id = ...` in raw SQL can't leak one tenant's data to another. Depends on connection pooling above |
