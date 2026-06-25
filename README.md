@@ -1,5 +1,7 @@
 # Expense Logger
 
+[![CI](https://github.com/derekl-beep/expense-logger/actions/workflows/ci.yml/badge.svg)](https://github.com/derekl-beep/expense-logger/actions/workflows/ci.yml)
+
 A personal expense tracker powered by an AI agent. Describe expenses in plain English — the agent parses them, infers missing fields, and saves structured records to a database. Query your spending the same way.
 
 > Built as a side project to explore how agentic AI changes application development.
@@ -135,6 +137,17 @@ npm run dev
 ```
 
 Open `http://localhost:5173`.
+
+---
+
+## Testing
+
+```bash
+uv run pytest tests/                          # backend unit tests, from repo root
+cd frontend && npm run test:e2e               # Playwright e2e suite (login, breakdown, budgets)
+```
+
+Both suites run against an isolated `expense_logger_test` database — never the dev `expense_logger` database. CI (`.github/workflows/ci.yml`) runs lint, build, and the full test suite on every push to `main`/`claude/**` and on pull requests into `main`, uploading the Playwright HTML report as a workflow artifact.
 
 ---
 
