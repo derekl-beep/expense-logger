@@ -749,9 +749,29 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
 
       {/* Header */}
       <div className="flex flex-col gap-2.5 px-4 py-3 border-b border-border shrink-0 md:px-5">
-        <div className="flex items-center justify-between">
-          <span className="text-sm font-semibold text-foreground">All Expenses</span>
-          <span className="text-xs text-muted-foreground">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="text-sm font-semibold text-foreground shrink-0">All Expenses</span>
+            {categoryFilter && (
+              <button
+                onClick={() => setCategoryFilter(null)}
+                className="h-6 px-2 text-xs inline-flex items-center gap-1 rounded-full border border-foreground/30 bg-muted text-foreground shrink-0"
+              >
+                {categoryFilter}
+                <span className="text-muted-foreground">✕</span>
+              </button>
+            )}
+            {userFilter && (
+              <button
+                onClick={() => setUserFilter(null)}
+                className="h-6 px-2 text-xs inline-flex items-center gap-1 rounded-full border border-foreground/30 bg-muted text-foreground shrink-0"
+              >
+                {userFilter}
+                <span className="text-muted-foreground">✕</span>
+              </button>
+            )}
+          </div>
+          <span className="text-xs text-muted-foreground shrink-0">
             Total: <span className="font-semibold text-foreground">${animatedTotal.toFixed(2)}</span>
           </span>
         </div>
@@ -811,29 +831,6 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-
-        {(categoryFilter || userFilter) && (
-          <div className="flex items-center gap-2 flex-wrap">
-            {categoryFilter && (
-              <button
-                onClick={() => setCategoryFilter(null)}
-                className="h-7 px-2.5 text-xs inline-flex items-center gap-1.5 rounded-full border border-foreground/30 bg-muted text-foreground"
-              >
-                {categoryFilter}
-                <span className="text-muted-foreground">✕</span>
-              </button>
-            )}
-            {userFilter && (
-              <button
-                onClick={() => setUserFilter(null)}
-                className="h-7 px-2.5 text-xs inline-flex items-center gap-1.5 rounded-full border border-foreground/30 bg-muted text-foreground"
-              >
-                {userFilter}
-                <span className="text-muted-foreground">✕</span>
-              </button>
-            )}
-          </div>
-        )}
       </div>
 
       <div className="relative flex-1 overflow-hidden">
