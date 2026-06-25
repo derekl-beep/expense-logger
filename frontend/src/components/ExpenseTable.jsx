@@ -3,7 +3,7 @@ import { toast } from "sonner";
 import {
   Car, Home, Package, Plane, UtensilsCrossed, Coffee, ShoppingCart, Sofa,
   Film, SprayCan, HeartPulse, Shirt, Phone, Bus, Fuel, Sparkles, Zap, Repeat, X, ArrowUp, MoreHorizontal,
-  Flag, Trash2, Wallet,
+  Flag, Trash2, Wallet, Search,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -748,55 +748,59 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
       </Dialog>
 
       {/* Header */}
-      <div className="flex flex-col gap-2 px-4 py-3 border-b border-border shrink-0 md:flex-row md:items-center md:justify-between md:px-5">
-        <div className="flex items-center justify-between md:justify-start md:gap-3">
+      <div className="flex flex-col gap-2.5 px-4 py-3 border-b border-border shrink-0 md:px-5">
+        <div className="flex items-center justify-between">
           <span className="text-sm font-semibold text-foreground">All Expenses</span>
-          <span className="text-xs text-muted-foreground md:hidden">
+          <span className="text-xs text-muted-foreground">
             Total: <span className="font-semibold text-foreground">${animatedTotal.toFixed(2)}</span>
           </span>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
+
+        <div className="flex items-center gap-2">
           <Select value={selectedMonth} onValueChange={setSelectedMonthOverride}>
-            <SelectTrigger className="h-8 text-xs w-32"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="h-8 text-xs w-28 md:w-32 shrink-0"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All time</SelectItem>
               {months.map((m) => <SelectItem key={m} value={m}>{formatMonth(m)}</SelectItem>)}
             </SelectContent>
           </Select>
-          {categoryFilter && (
-            <button
-              onClick={() => setCategoryFilter(null)}
-              className="h-8 px-3 text-xs inline-flex items-center gap-1.5 rounded-md border border-foreground/30 bg-muted text-foreground"
-            >
-              {categoryFilter}
-              <span className="text-muted-foreground">✕</span>
-            </button>
-          )}
-          {userFilter && (
-            <button
-              onClick={() => setUserFilter(null)}
-              className="h-8 px-3 text-xs inline-flex items-center gap-1.5 rounded-md border border-foreground/30 bg-muted text-foreground"
-            >
-              {userFilter}
-              <span className="text-muted-foreground">✕</span>
-            </button>
-          )}
+
           <button
             onClick={() => setFlaggedOnly((f) => !f)}
-            className={`h-8 px-3 text-xs inline-flex items-center gap-1 rounded-md border transition-colors ${
+            title="Flagged only"
+            aria-label="Flagged only"
+            aria-pressed={flaggedOnly}
+            className={`shrink-0 h-8 w-8 flex items-center justify-center rounded-md border transition-colors ${
               flaggedOnly
-                ? "border-amber-400 bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-700"
+                ? "border-amber-400 bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-700"
                 : "border-border text-muted-foreground hover:bg-muted"
             }`}
           >
-            ⚑ Flagged
+            <Flag className="w-3.5 h-3.5" fill={flaggedOnly ? "currentColor" : "none"} />
           </button>
-          <span className="text-xs text-muted-foreground hidden md:inline">
-            Total: <span className="font-semibold text-foreground">${animatedTotal.toFixed(2)}</span>
-          </span>
+
+          <div className="relative flex-1 min-w-0">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+            <Input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search…"
+              className="h-8 text-sm pl-7 pr-7"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="w-7 h-7 flex items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
+              <button className="shrink-0 w-8 h-8 flex items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
                 <MoreHorizontal className="w-4 h-4" />
               </button>
             </DropdownMenuTrigger>
@@ -807,24 +811,28 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-      </div>
 
-      {/* Search */}
-      <div className="px-4 py-2 md:px-5 border-b border-border shrink-0 relative">
-        <Input
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Search description…"
-          className="h-8 text-sm pr-7"
-        />
-        {searchQuery && (
-          <button
-            type="button"
-            onClick={() => setSearchQuery("")}
-            className="absolute right-6 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
+        {(categoryFilter || userFilter) && (
+          <div className="flex items-center gap-2 flex-wrap">
+            {categoryFilter && (
+              <button
+                onClick={() => setCategoryFilter(null)}
+                className="h-7 px-2.5 text-xs inline-flex items-center gap-1.5 rounded-full border border-foreground/30 bg-muted text-foreground"
+              >
+                {categoryFilter}
+                <span className="text-muted-foreground">✕</span>
+              </button>
+            )}
+            {userFilter && (
+              <button
+                onClick={() => setUserFilter(null)}
+                className="h-7 px-2.5 text-xs inline-flex items-center gap-1.5 rounded-full border border-foreground/30 bg-muted text-foreground"
+              >
+                {userFilter}
+                <span className="text-muted-foreground">✕</span>
+              </button>
+            )}
+          </div>
         )}
       </div>
 
