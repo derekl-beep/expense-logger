@@ -3,7 +3,7 @@ import { toast } from "sonner";
 import {
   Car, Home, Package, Plane, UtensilsCrossed, Coffee, ShoppingCart, Sofa,
   Film, SprayCan, HeartPulse, Shirt, Phone, Bus, Fuel, Sparkles, Zap, Repeat, X, ArrowUp, MoreHorizontal,
-  Flag, Trash2, Wallet, Search,
+  Flag, Trash2, Wallet, Search, ChevronDown,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -475,6 +475,8 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
   const [editValues, setEditValues] = useState({});
   const [categories, setCategories] = useState([]);
   const [budgets, setBudgets] = useState([]);
+  const [recurring, setRecurring] = useState([]);
+  const [showRecurring, setShowRecurring] = useState(false);
   const [overrides, setOverrides] = useState({});
   const [deletedIds, setDeletedIds] = useState(() => new Set());
   const [showAllCategories, setShowAllCategories] = useState(false);
@@ -506,6 +508,7 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
 
   useEffect(() => {
     fetchBudgets();
+    authFetch("/expenses/recurring").then((r) => r.json()).then(setRecurring);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -866,6 +869,36 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
               >
                 {showAllCategories ? "View less" : `View ${breakdown.length - 5} more`}
               </button>
+            )}
+          </div>
+        )}
+
+        {/* ── Recurring charges ── */}
+        {recurring.length > 0 && (
+          <div className={`px-4 py-3 md:px-5 border-b border-border/50 ${searchQuery ? "hidden md:block" : ""}`}>
+            <button
+              type="button"
+              onClick={() => setShowRecurring((v) => !v)}
+              className="flex items-center justify-between w-full text-left"
+            >
+              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Recurring · {recurring.length}
+              </span>
+              <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground transition-transform ${showRecurring ? "rotate-180" : ""}`} />
+            </button>
+            {showRecurring && (
+              <div className="space-y-1.5 mt-2">
+                {recurring.map((r) => (
+                  <div key={`${r.description}-${r.amount}`} className="flex items-center gap-2">
+                    <CategoryBadge category={r.category} small />
+                    <span className="text-xs text-foreground flex-1 truncate">{r.description}</span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-md font-medium bg-muted text-muted-foreground shrink-0">
+                      {r.frequency[0].toUpperCase() + r.frequency.slice(1)}
+                    </span>
+                    <span className="text-xs font-semibold text-foreground tabular-nums shrink-0">${r.amount.toFixed(2)}</span>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         )}

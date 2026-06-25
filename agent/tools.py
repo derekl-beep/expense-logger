@@ -5,6 +5,7 @@ from agent.db import (
     get_category_breakdown,
     get_expenses,
     get_monthly_trend,
+    get_recurring_expenses,
     get_run_rate,
     get_top_expenses,
     get_user_breakdown,
@@ -142,6 +143,15 @@ TOOL_DEFINITIONS = [
         },
     },
     {
+        "name": "get_recurring_expenses",
+        "description": "Detect recurring charges — same description and amount appearing at least 3 times at a consistent weekly/biweekly/monthly/yearly interval (e.g. rent, subscriptions). Use for 'what are my subscriptions/recurring charges' questions. Report exactly what's returned, don't guess at additional recurring charges yourself.",
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    {
         "name": "get_user_breakdown",
         "description": "Get spending totals per user who logged expenses, for a date range. This is a shared household tracker — use this for 'who spent more' questions.",
         "input_schema": {
@@ -203,6 +213,7 @@ TOOL_HANDLERS = {
     "get_expenses":           get_expenses,
     "get_category_breakdown": get_category_breakdown,
     "get_monthly_trend":      get_monthly_trend,
+    "get_recurring_expenses": get_recurring_expenses,
     "get_run_rate":           get_run_rate,
     "get_top_expenses":       get_top_expenses,
     "get_user_breakdown":     get_user_breakdown,
@@ -221,4 +232,5 @@ SUGGESTED_PROMPTS = [
     {"label": "Spending trend", "prompt": "How has my dining spending trended over the last few months?"},
     {"label": "Biggest purchases", "prompt": "What are my biggest purchases this month?"},
     {"label": "Weekday pattern", "prompt": "What days of the week do I spend the most on?"},
+    {"label": "Recurring charges", "prompt": "What are my recurring or subscription charges?"},
 ]

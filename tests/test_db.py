@@ -199,3 +199,55 @@ def test_weekday_pattern_fills_gaps_for_days_with_no_spend(user_id):
     assert by_day["Monday"]["total"] == 100.0
     assert by_day["Tuesday"]["total"] == 0.0
     assert by_day["Tuesday"]["count"] == 0
+
+
+# --- get_recurring_expenses --------------------------------------------------
+
+def test_recurring_detects_monthly_pattern(user_id):
+    for day in ["2026-03-05", "2026-04-05", "2026-05-05", "2026-06-05"]:
+        add_expense(user_id, 1850, "Rent", "Monthly Rent", day)
+
+    result = db.get_recurring_expenses()
+
+    assert len(result) == 1
+    r = result[0]
+    assert r["description"] == "Monthly Rent"
+    assert r["amount"] == 1850.0
+    assert r["frequency"] == "monthly"
+    assert r["occurrences"] == 4
+    assert r["last_date"] == "2026-06-05"
+
+
+def test_recurring_requires_at_least_three_occurrences(user_id):
+    add_expense(user_id, 50, "Entertainment", "Concert Ticket", "2026-01-01")
+    add_expense(user_id, 50, "Entertainment", "Concert Ticket", "2026-02-01")
+
+    assert db.get_recurring_expenses() == []
+
+
+def test_recurring_ignores_inconsistent_intervals(user_id):
+    add_expense(user_id, 20, "Dining", "Random Lunch", "2026-01-01")
+    add_expense(user_id, 20, "Dining", "Random Lunch", "2026-01-15")
+    add_expense(user_id, 20, "Dining", "Random Lunch", "2026-03-20")
+
+    assert db.get_recurring_expenses() == []
+
+
+def test_recurring_classifies_weekly_frequency(user_id):
+    for day in ["2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"]:
+        add_expense(user_id, 5, "Drinks", "Coffee Subscription", day)
+
+    result = db.get_recurring_expenses()
+
+    assert len(result) == 1
+    assert result[0]["frequency"] == "weekly"
+
+
+def test_recurring_treats_different_amounts_as_separate_unconfirmed_groups(user_id):
+    # Same description but a different amount each time -> each group only has 1
+    # occurrence, never reaching the >=3 threshold even though 3 charges exist.
+    add_expense(user_id, 1850, "Rent", "Rent", "2026-01-05")
+    add_expense(user_id, 1900, "Rent", "Rent", "2026-02-05")
+    add_expense(user_id, 1950, "Rent", "Rent", "2026-03-05")
+
+    assert db.get_recurring_expenses() == []
