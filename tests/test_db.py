@@ -251,3 +251,75 @@ def test_recurring_treats_different_amounts_as_separate_unconfirmed_groups(user_
     add_expense(user_id, 1950, "Rent", "Rent", "2026-03-05")
 
     assert db.get_recurring_expenses() == []
+
+
+# --- get_expenses description_contains ---------------------------------
+
+def test_get_expenses_description_contains_matches_substring(user_id):
+    add_expense(user_id, 10, "Groceries", "Groceries at Costco", "2026-06-01")
+    add_expense(user_id, 20, "Dining", "Lunch at Cafe", "2026-06-02")
+
+    result = db.get_expenses(description_contains="costco")
+    assert len(result) == 1
+    assert result[0]["description"] == "Groceries at Costco"
+
+
+def test_get_expenses_description_contains_no_match_returns_empty(user_id):
+    add_expense(user_id, 10, "Groceries", "Groceries at Costco", "2026-06-01")
+    assert db.get_expenses(description_contains="nonexistent vendor") == []
+
+
+# --- get_average_transaction --------------------------------------------
+
+def test_average_transaction_for_category(user_id):
+    add_expense(user_id, 10, "Dining", "A", "2026-06-01")
+    add_expense(user_id, 20, "Dining", "B", "2026-06-02")
+    add_expense(user_id, 999, "Rent", "C", "2026-06-01")
+
+    result = db.get_average_transaction(category="Dining")
+    assert result["average"] == 15.0
+    assert result["count"] == 2
+
+
+def test_average_transaction_no_matches_returns_zero():
+    result = db.get_average_transaction(category="Dining")
+    assert result == {"category": "Dining", "average": 0.0, "count": 0}
+
+
+# --- get_budget_status ----------------------------------------------------
+
+def test_budget_status_computes_spent_remaining_and_pct(user_id):
+    db.set_budget("Dining", 200)
+    add_expense(user_id, 50, "Dining", "A", "2026-06-05")
+    add_expense(user_id, 25, "Dining", "B", "2026-06-10")
+
+    result = db.get_budget_status(month="2026-06")
+    assert len(result) == 1
+    r = result[0]
+    assert r["category"] == "Dining"
+    assert r["monthly_limit"] == 200.0
+    assert r["spent"] == 75.0
+    assert r["remaining"] == 125.0
+    assert r["pct_used"] == 37.5
+    assert r["over_budget"] is False
+
+
+def test_budget_status_flags_over_budget(user_id):
+    db.set_budget("Dining", 100)
+    add_expense(user_id, 150, "Dining", "Big spend", "2026-06-05")
+
+    result = db.get_budget_status(month="2026-06")
+    assert result[0]["over_budget"] is True
+    assert result[0]["remaining"] == -50.0
+
+
+def test_budget_status_excludes_other_months(user_id):
+    db.set_budget("Dining", 200)
+    add_expense(user_id, 50, "Dining", "Last month", "2026-05-15")
+
+    result = db.get_budget_status(month="2026-06")
+    assert result[0]["spent"] == 0.0
+
+
+def test_budget_status_category_with_no_budget_returns_empty():
+    assert db.get_budget_status(category="Dining") == []

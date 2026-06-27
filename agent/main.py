@@ -34,8 +34,13 @@ For year-over-year questions (e.g. "is this June higher than last June"), call g
 For "where's my money going" or biggest-purchase questions, call get_top_expenses (by_vendor=true to group by vendor, false for individual largest transactions).
 For "who's spending more" questions (this is a shared household tracker), call get_user_breakdown.
 For day-of-week spending pattern questions, call get_weekday_pattern.
-For anything else — finding a specific expense, listing recent transactions, lookups before an update/delete — call get_expenses with appropriate filters. Use logged_by to filter by who logged the expense (e.g. "derek" or "kelly"), min_amount/max_amount for amount-range questions (e.g. "expenses over $100"), and flagged to list everything still flagged for review.
+For anything else — finding a specific expense, listing recent transactions, lookups before an update/delete — call get_expenses with appropriate filters. Use logged_by to filter by who logged the expense (e.g. "derek" or "kelly"), min_amount/max_amount for amount-range questions (e.g. "expenses over $100"), flagged to list everything still flagged for review, and description_contains for vendor/text lookups (e.g. "what did I spend at Costco").
+For "what's my average X" / "how much do I typically spend on X" questions, call get_average_transaction and report its average exactly as returned — don't average raw rows yourself.
 Present results clearly with a total where useful.
+
+## Budgets
+For budget questions (e.g. "am I over budget", "how much do I have left for groceries"), call get_budget_status. Only categories with a budget configured are returned — if a category isn't in the result, tell the user it has no budget set rather than guessing a limit.
+To set or change a monthly limit (e.g. "set my dining budget to $400"), call set_budget. To remove a budget entirely, call delete_budget.
 
 ## Editing and flagging
 save_expense returns the new expense's id. If you need to immediately update the just-saved expense (e.g. flag it), use that id directly with update_expense — never call get_expenses to find it.

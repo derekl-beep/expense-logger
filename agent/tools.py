@@ -1,7 +1,10 @@
 from agent.categories import CATEGORIES
 from agent.db import (
+    delete_budget,
     delete_expense,
     find_similar_expenses,
+    get_average_transaction,
+    get_budget_status,
     get_category_breakdown,
     get_expenses,
     get_monthly_trend,
@@ -13,6 +16,7 @@ from agent.db import (
     get_weekly_pace,
     get_yoy_comparison,
     save_expense,
+    set_budget,
     update_expense,
 )
 
@@ -57,6 +61,7 @@ TOOL_DEFINITIONS = [
                 "min_amount": {"type": "number", "description": "Only include expenses with amount >= this value"},
                 "max_amount": {"type": "number", "description": "Only include expenses with amount <= this value"},
                 "flagged":    {"type": "boolean", "description": "Filter to only flagged (true) or only unflagged (false) expenses"},
+                "description_contains": {"type": "string", "description": "Filter to expenses whose description contains this text (case-insensitive substring match) — use for vendor/text lookups like 'what did I spend at Costco'"},
             },
             "required": [],
         },
@@ -205,6 +210,55 @@ TOOL_DEFINITIONS = [
             "required": ["id"],
         },
     },
+    {
+        "name": "get_average_transaction",
+        "description": "Get the average transaction amount and transaction count for a category and/or date range, computed in the database. Use for 'what's my average coffee purchase' / 'how much do I typically spend on X' questions — report the average exactly as returned, don't compute it yourself from raw rows.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "category":   {**_category_enum, "description": "Limit to this category; omit for the average across all categories"},
+                "start_date": {"type": "string", "description": "Filter from this ISO date (inclusive)"},
+                "end_date":   {"type": "string", "description": "Filter to this ISO date (inclusive)"},
+                "logged_by":  {"type": "string", "description": "Filter by the username who logged the expense"},
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "get_budget_status",
+        "description": "Get monthly budget limits, amount spent so far, remaining amount, and percent used for each category that has a budget configured, for a given calendar month (defaults to the current month). Use for 'am I over budget' / 'how much budget do I have left' questions. Categories with no budget configured won't appear — don't invent a limit for them.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "category": {**_category_enum, "description": "Limit to this category; omit to get status for every budgeted category"},
+                "month":    {"type": "string", "description": "Month to check, as YYYY-MM (defaults to the current calendar month)"},
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "set_budget",
+        "description": "Set or update the monthly spending limit for a category. This overwrites any existing limit for that category.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "category":      {**_category_enum, "description": "Category to set a budget for"},
+                "monthly_limit": {"type": "number", "description": "Monthly spending limit in dollars"},
+            },
+            "required": ["category", "monthly_limit"],
+        },
+    },
+    {
+        "name": "delete_budget",
+        "description": "Remove the monthly budget limit for a category, so it's no longer tracked.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "category": {**_category_enum, "description": "Category to remove the budget for"},
+            },
+            "required": ["category"],
+        },
+    },
 ]
 
 TOOL_HANDLERS = {
@@ -222,6 +276,10 @@ TOOL_HANDLERS = {
     "get_yoy_comparison":     get_yoy_comparison,
     "update_expense":         update_expense,
     "delete_expense":         delete_expense,
+    "get_average_transaction": get_average_transaction,
+    "get_budget_status":      get_budget_status,
+    "set_budget":             set_budget,
+    "delete_budget":          delete_budget,
 }
 
 # Example prompts shown as chips in a fresh chat — one per analytics tool above,
@@ -233,4 +291,5 @@ SUGGESTED_PROMPTS = [
     {"label": "Biggest purchases", "prompt": "What are my biggest purchases this month?"},
     {"label": "Weekday pattern", "prompt": "What days of the week do I spend the most on?"},
     {"label": "Recurring charges", "prompt": "What are my recurring or subscription charges?"},
+    {"label": "Budget status", "prompt": "Am I over budget on anything this month?"},
 ]
