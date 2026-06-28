@@ -45,6 +45,7 @@ export default function Chat({ onExpenseChange, className = "", token, username,
   const bottomRef = useRef(null);
   const fileInputRef = useRef(null);
   const messagesContainerRef = useRef(null);
+  const lastFileAttachRef = useRef(0);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [suggestions, setSuggestions] = useState([]);
 
@@ -75,6 +76,10 @@ export default function Chat({ onExpenseChange, className = "", token, username,
     const files = Array.from(e.target.files || []);
     e.target.value = "";
     if (!files.length) return;
+    // iOS Safari can deliver a ghost tap-through to whatever's under the Send
+    // button right as the native Photo Library sheet dismisses. Guard against
+    // it by swallowing one send() call in the brief window after attaching.
+    lastFileAttachRef.current = Date.now();
     const room = MAX_IMAGES - images.length;
     files.slice(0, room).forEach((file) => {
       const reader = new FileReader();
@@ -165,6 +170,10 @@ export default function Chat({ onExpenseChange, className = "", token, username,
   };
 
   const send = () => {
+    if (Date.now() - lastFileAttachRef.current < 500) {
+      lastFileAttachRef.current = 0;
+      return;
+    }
     const text = input.trim() || (images.length ? `Please log the expenses from ${images.length > 1 ? "these images" : "this image"}.` : "");
     if (!text) return;
     setInput("");
