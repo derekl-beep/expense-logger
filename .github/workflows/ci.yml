@@ -53,6 +53,8 @@ jobs:
       - run: uv run pytest tests/ -q
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/expense_logger
+          ANTHROPIC_API_KEY: dummy
+          JWT_SECRET: test-secret
 
   e2e:
     runs-on: ubuntu-latest

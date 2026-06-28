@@ -166,6 +166,7 @@ def get_expenses(
     min_amount: float = None,
     max_amount: float = None,
     flagged: bool = None,
+    description_contains: str = None,
 ) -> list[dict]:
     query = """
         SELECT e.id, e.amount, e.category, e.description, e.date, e.flagged, u.username AS logged_by
@@ -195,9 +196,43 @@ def get_expenses(
     if flagged is not None:
         query += " AND e.flagged = %s"
         params.append(flagged)
+    if description_contains:
+        query += " AND e.description ILIKE %s"
+        params.append(f"%{description_contains}%")
     query += " ORDER BY e.date DESC, e.id DESC"
     cur = _run(query, params)
     return [_row(r) for r in cur.fetchall()]
+
+
+def get_average_transaction(
+    category: str = None,
+    start_date: str = None,
+    end_date: str = None,
+    logged_by: str = None,
+) -> dict:
+    query = """
+        SELECT AVG(e.amount) AS average, COUNT(*) AS count
+        FROM expenses e
+        LEFT JOIN users u ON e.user_id = u.id
+        WHERE 1=1
+    """
+    params = []
+    if category:
+        query += " AND LOWER(e.category) = LOWER(%s)"
+        params.append(category)
+    if start_date:
+        query += " AND e.date >= %s"
+        params.append(start_date)
+    if end_date:
+        query += " AND e.date <= %s"
+        params.append(end_date)
+    if logged_by:
+        query += " AND LOWER(u.username) = LOWER(%s)"
+        params.append(logged_by)
+    row = _run(query, params).fetchone()
+    count = row["count"]
+    average = round(float(row["average"]), 2) if row["average"] is not None else 0.0
+    return {"category": category, "average": average, "count": count}
 
 
 def _shift_month(d: date, delta: int) -> date:
@@ -581,6 +616,39 @@ def delete_expense(id: int) -> dict:
 def get_budgets() -> list[dict]:
     cur = _run("SELECT category, monthly_limit FROM budgets ORDER BY category")
     return [{"category": r["category"], "monthly_limit": float(r["monthly_limit"])} for r in cur.fetchall()]
+
+
+def get_budget_status(category: str = None, month: str = None) -> list[dict]:
+    """Spend vs. budget for each configured category in a calendar month (defaults to current month)."""
+    ref = date.fromisoformat(f"{month}-01") if month else date.today()
+    month_start = ref.replace(day=1)
+    month_end = _shift_month(month_start, 1)
+
+    query = "SELECT category, monthly_limit FROM budgets WHERE 1=1"
+    params = []
+    if category:
+        query += " AND LOWER(category) = LOWER(%s)"
+        params.append(category)
+    query += " ORDER BY category"
+    budgets = _run(query, params).fetchall()
+
+    status = []
+    for b in budgets:
+        cur = _run(
+            "SELECT COALESCE(SUM(amount), 0) AS total FROM expenses WHERE LOWER(category) = LOWER(%s) AND date >= %s AND date < %s",
+            (b["category"], month_start.isoformat(), month_end.isoformat()),
+        )
+        spent = float(cur.fetchone()["total"])
+        limit = float(b["monthly_limit"])
+        status.append({
+            "category": b["category"],
+            "monthly_limit": limit,
+            "spent": round(spent, 2),
+            "remaining": round(limit - spent, 2),
+            "pct_used": round(spent / limit * 100, 1) if limit else 0.0,
+            "over_budget": spent > limit,
+        })
+    return status
 
 
 def set_budget(category: str, monthly_limit: float) -> dict:

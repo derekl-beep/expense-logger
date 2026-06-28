@@ -195,7 +195,9 @@ def delete_expense_endpoint(id: int, user_id: int = Depends(get_current_user)):
 def expenses_export(user_id: int = Depends(get_current_user)):
     rows = get_expenses()
     output = io.StringIO()
-    writer = csv.DictWriter(output, fieldnames=["id", "date", "description", "category", "amount"])
+    writer = csv.DictWriter(
+        output, fieldnames=["id", "date", "description", "category", "amount", "logged_by", "flagged"]
+    )
     writer.writeheader()
     writer.writerows(rows)
     output.seek(0)
