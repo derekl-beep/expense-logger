@@ -194,3 +194,43 @@ def test_stream_chat_runs_tool_then_streams_final_text(monkeypatch):
 
     assert chunks == ["No", " expenses"]
     assert streams == []
+
+
+def test_stream_chat_inserts_space_between_turns_missing_one(monkeypatch):
+    main.clear_session(5)
+    monkeypatch.setitem(main.TOOL_HANDLERS, "get_expenses", lambda **kw: [])
+
+    tool_block = make_block("tool_use", name="get_expenses", input={}, id="tool_1")
+    streams = [
+        FakeStream(["I'll log both today."], make_response([tool_block], "tool_use")),
+        FakeStream(["Done!"], make_response([make_block("text", text="Done!")], "end_turn")),
+    ]
+
+    def fake_stream(**kw):
+        return streams.pop(0)
+
+    monkeypatch.setattr(main.client.messages, "stream", fake_stream)
+
+    chunks = list(main.stream_chat("log two expenses", user_id=5))
+
+    assert "".join(chunks) == "I'll log both today. Done!"
+
+
+def test_stream_chat_does_not_double_space_when_turn_already_ends_in_space(monkeypatch):
+    main.clear_session(6)
+    monkeypatch.setitem(main.TOOL_HANDLERS, "get_expenses", lambda **kw: [])
+
+    tool_block = make_block("tool_use", name="get_expenses", input={}, id="tool_2")
+    streams = [
+        FakeStream(["Logging it. "], make_response([tool_block], "tool_use")),
+        FakeStream(["Done!"], make_response([make_block("text", text="Done!")], "end_turn")),
+    ]
+
+    def fake_stream(**kw):
+        return streams.pop(0)
+
+    monkeypatch.setattr(main.client.messages, "stream", fake_stream)
+
+    chunks = list(main.stream_chat("log an expense", user_id=6))
+
+    assert "".join(chunks) == "Logging it. Done!"

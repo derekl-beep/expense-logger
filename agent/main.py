@@ -148,6 +148,7 @@ def stream_chat(user_input: str, user_id: int, username: str = "user", images: l
     content = _build_user_content(user_input, images)
     messages.append({"role": "user", "content": content})
 
+    last_char = ""
     while True:
         with client.messages.stream(
             model=MODEL_DEFAULT,
@@ -156,8 +157,20 @@ def stream_chat(user_input: str, user_id: int, username: str = "user", images: l
             tools=TOOL_DEFINITIONS,
             messages=messages[-HISTORY_LIMIT:],
         ) as stream:
+            first_chunk_of_turn = True
             for chunk in stream.text_stream:
+                if not chunk:
+                    continue
+                # Each turn streams independently, so the model can end one turn
+                # with "...today." and start the next (post-tool_use) with "Done!"
+                # with no space in between. Only check at the turn boundary —
+                # chunks within a single turn are exact slices of one continuous
+                # string and always join up correctly on their own.
+                if first_chunk_of_turn and last_char and not last_char.isspace() and not chunk[0].isspace():
+                    yield " "
                 yield chunk
+                last_char = chunk[-1]
+                first_chunk_of_turn = False
             final = stream.get_final_message()
 
         messages.append({"role": "assistant", "content": final.content})
