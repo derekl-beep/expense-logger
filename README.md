@@ -18,7 +18,9 @@ A personal expense tracker powered by an AI agent. Describe expenses in plain En
 - **Vendor memory** — fuzzy-matches new expenses against past descriptions (Postgres trigram similarity) to reuse a vendor's category instead of asking again
 - **Duplicate detection** — flags same-day, same-amount, similar-description expenses for review instead of silently double-logging
 - **Full CRUD via chat** — update or delete past expenses through conversation
-- **Spending analytics** — category breakdowns, monthly trends, run-rate/weekly-pace projections, YoY comparisons, top expenses, weekday/per-user breakdowns, one-click monthly summary — all computed in SQL, never re-tallied by the model
+- **Spending analytics** — category breakdowns, monthly trends, run-rate/weekly-pace projections, YoY comparisons, top/average expenses, weekday/per-user breakdowns, one-click monthly summary — all computed in SQL, never re-tallied by the model
+- **Budgets** — per-category monthly limits, editable via a dedicated panel or by chat; breakdown view highlights categories that are near or over budget
+- **Recurring charge detection** — surfaces repeating same-description/amount expenses (subscriptions, rent) without manual tagging
 - **Live expense table** — updates after every message, filterable by month and flagged status
 - **CSV export** — download all expenses anytime
 - **Installable on mobile** — add-to-home-screen support, dark mode persisted across sessions
@@ -74,13 +76,20 @@ expense-logger/
 │   ├── main.py         # agent loop + streaming + system prompt
 │   ├── tools.py        # tool definitions + handler map
 │   ├── db.py           # PostgreSQL queries (psycopg2)
-│   └── categories.py   # fixed category list (17 categories)
+│   └── categories.py   # fixed category list (18 categories)
 ├── api/
 │   ├── server.py       # FastAPI routes + static file serving
 │   └── auth.py         # JWT creation/verification, bcrypt helpers
 ├── scripts/
-│   └── seed_users.py   # one-time script to create family accounts
+│   ├── seed_users.py      # one-time script to create family accounts
+│   └── seed_e2e_data.py   # deterministic seed data for e2e tests / local dev
+├── tests/
+│   ├── conftest.py     # autouse fixture: truncate + reseed test DB per test
+│   ├── test_agent.py   # agent loop + streaming
+│   ├── test_db.py      # agent/db.py query functions
+│   └── test_api.py     # FastAPI routes + auth
 ├── frontend/
+│   ├── e2e/             # Playwright specs (login, breakdown, budgets, expenses, chat)
 │   └── src/
 │       ├── App.jsx
 │       └── components/
@@ -144,10 +153,10 @@ Open `http://localhost:5173`.
 
 ```bash
 uv run pytest tests/                          # backend unit tests, from repo root
-cd frontend && npm run test:e2e               # Playwright e2e suite (login, breakdown, budgets)
+cd frontend && npm run test:e2e               # Playwright e2e suite (login, breakdown, budgets, expenses, chat)
 ```
 
-Both suites run against an isolated `expense_logger_test` database — never the dev `expense_logger` database. CI (`.github/workflows/ci.yml`) runs lint, build, and the full test suite on every push to `main`/`claude/**` and on pull requests into `main`, uploading the Playwright HTML report as a workflow artifact.
+Both suites run against an isolated `expense_logger_test` database — never the dev `expense_logger` database. CI (`.github/workflows/ci.yml`) runs three jobs on every push to `main` and on pull requests into `main`: frontend lint+build, backend `ruff check` + `pytest`, and the full Playwright e2e suite — uploading the HTML report as a workflow artifact.
 
 ---
 
@@ -190,6 +199,7 @@ The app is packaged as a single Docker image — FastAPI serves both the API and
 | Constrained output | Category field uses JSON schema `enum` |
 | JWT auth as FastAPI dependency | `api/auth.py` → `Depends(get_current_user)` |
 | API cost guard | `check_rate_limit` dependency on all chat endpoints |
+| One domain function, two interfaces | Budgets are mutable both via chat (`set_budget`/`delete_budget` tools) and REST (`PUT`/`DELETE /budgets/{category}`) — both paths call the same `agent/db.py` functions, so the UI's Manage Budgets panel never has to go through the agent |
 
 ---
 
@@ -199,10 +209,9 @@ Tiered by value vs. implementation complexity — not strict build order, but hi
 
 | Tier | Feature | Notes |
 |---|---|---|
-| 1 · Quick win | Recurring expense detection | Exact `(description, amount)` grouping + interval-consistency check, instead of manual re-entry every month |
-| 1 · Quick win | Budget limits & alerts | Per-category monthly budgets; notify when approaching or exceeding them |
+| 1 · Quick win | Budget alerts | Limits themselves already exist (Manage Budgets panel + `set_budget`/chat); this is just the proactive "you just crossed 80% of Dining" notification, gated on the Scheduler + push/email delivery infra below |
 | 2 · Builds on Tier 1 | Frequent vendor insights _(agentic)_ | New `vendor` column extracted/normalized by the agent at save time (reusing the existing trigram vendor-recall for consistent spelling), surfaced as a ranked-by-frequency-and-total breakdown with a per-vendor ignore list (e.g. hide "Landlord"); backfill existing rows via a one-off script parsing the `"[What] at [Venue]"` description convention |
-| 2 · Builds on Tier 1 | Subscription tracker | Renewal dates, monthly/annual cost rollup — sourced from recurring-charge detection |
+| 2 · Builds on Tier 1 | Subscription tracker | Renewal dates, monthly/annual cost rollup — builds on the recurring-charge detection already shipped |
 | 2 · Builds on Tier 1 | Weekly/monthly digest _(agentic)_ | Proactive scheduled spending summary — trends, top categories, changes vs. last period |
 | 3 · New integration surface | Email forwarding | Forward order/receipt emails to a dedicated inbox; agent extracts and logs automatically |
 | 3 · New integration surface | Family group chat bot | Log expenses from WhatsApp/Telegram, not just the web app |
