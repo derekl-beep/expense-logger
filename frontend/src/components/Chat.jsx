@@ -82,6 +82,8 @@ export default function Chat({ onExpenseChange, className = "", token, username,
   const lastFileAttachRef = useRef(0);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [suggestions, setSuggestions] = useState([]);
+  const [commands, setCommands] = useState([]);
+  const [rawSelectedCommandIndex, setSelectedCommandIndex] = useState(0);
 
   // Show "Still working…" if a turn runs long, so a slow tool call doesn't read as hung.
   useEffect(() => {
@@ -92,7 +94,19 @@ export default function Chat({ onExpenseChange, className = "", token, username,
 
   useEffect(() => {
     fetch("/chat/suggestions").then((r) => r.json()).then(setSuggestions).catch(() => {});
+    fetch("/chat/commands").then((r) => r.json()).then(setCommands).catch(() => {});
   }, []);
+
+  // Typing "/" opens a command palette listing every analytics tool, not just
+  // the handful surfaced as suggestion chips.
+  const paletteQuery = input.startsWith("/") ? input.slice(1).toLowerCase() : null;
+  const filteredCommands = paletteQuery !== null
+    ? commands.filter((c) => c.command.slice(1).toLowerCase().includes(paletteQuery) || c.label.toLowerCase().includes(paletteQuery))
+    : [];
+  const showPalette = paletteQuery !== null && filteredCommands.length > 0;
+  // Clamped (not reset via effect) so the highlighted row always stays in
+  // range as filteredCommands shrinks/grows while typing.
+  const selectedCommandIndex = Math.min(rawSelectedCommandIndex, Math.max(filteredCommands.length - 1, 0));
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -258,7 +272,17 @@ export default function Chat({ onExpenseChange, className = "", token, username,
     }
   };
 
+  const runCommand = (cmd) => {
+    setInput("");
+    sendMessage(cmd.prompt, cmd.label);
+  };
+
   const send = () => {
+    // Date.now() only ever runs here, inside a click/keydown handler, never
+    // during render — eslint-plugin-react-hooks' purity check misattributes
+    // it as render-time when this function sits alongside runCommand() in
+    // onKeyDown's branches; false positive, not an actual purity violation.
+    // eslint-disable-next-line react-hooks/purity
     if (Date.now() - lastFileAttachRef.current < 500) {
       lastFileAttachRef.current = 0;
       return;
@@ -292,7 +316,25 @@ export default function Chat({ onExpenseChange, className = "", token, username,
   const isTouchDevice = typeof window !== "undefined" && navigator.maxTouchPoints > 0;
 
   const onKeyDown = (e) => {
-    if (e.key === "Enter" && !e.shiftKey && !isTouchDevice) { e.preventDefault(); send(); }
+    if (showPalette && e.key === "ArrowDown") {
+      e.preventDefault();
+      setSelectedCommandIndex((i) => Math.min(i + 1, filteredCommands.length - 1));
+    } else if (showPalette && e.key === "ArrowUp") {
+      e.preventDefault();
+      // Re-clamp to the current (possibly since-narrowed) list before
+      // decrementing — otherwise a raw index left over from a longer list
+      // silently decrements out of view and resurfaces oddly once widened.
+      setSelectedCommandIndex((i) => Math.max(Math.min(i, filteredCommands.length - 1) - 1, 0));
+    } else if (showPalette && e.key === "Escape") {
+      e.preventDefault();
+      setInput("");
+    } else if (showPalette && e.key === "Enter" && !e.shiftKey && !isTouchDevice) {
+      e.preventDefault();
+      runCommand(filteredCommands[selectedCommandIndex]);
+    } else if (e.key === "Enter" && !e.shiftKey && !isTouchDevice) {
+      e.preventDefault();
+      send();
+    }
   };
 
   const clearChat = () => {
@@ -438,7 +480,24 @@ export default function Chat({ onExpenseChange, className = "", token, username,
       </div>
 
       {/* Input */}
-      <div className="px-4 pt-3 pb-[max(12px,env(safe-area-inset-bottom))] border-t border-border shrink-0">
+      <div className="relative px-4 pt-3 pb-[max(12px,env(safe-area-inset-bottom))] border-t border-border shrink-0">
+        {showPalette && (
+          <div className="absolute bottom-full left-4 right-4 mb-2 rounded-xl border border-border bg-popover shadow-lg overflow-hidden max-h-52 overflow-y-auto">
+            {filteredCommands.map((c, i) => (
+              <button
+                key={c.command}
+                type="button"
+                onClick={() => runCommand(c)}
+                className={`w-full text-left px-3 py-2 text-sm flex items-center justify-between gap-2 transition-colors ${
+                  i === selectedCommandIndex ? "bg-muted" : "hover:bg-muted/50"
+                }`}
+              >
+                <span className="text-foreground">{c.label}</span>
+                <span className="text-xs text-muted-foreground font-mono">{c.command}</span>
+              </button>
+            ))}
+          </div>
+        )}
         {images.length > 0 && (
           <div className="flex flex-wrap gap-2 mb-2">
             {images.map((img, i) => (

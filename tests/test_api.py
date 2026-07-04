@@ -60,6 +60,11 @@ def test_chat_suggestions_endpoint():
     assert client.get("/chat/suggestions").json() == SUGGESTED_PROMPTS
 
 
+def test_chat_commands_endpoint():
+    from agent.tools import COMMAND_PROMPTS
+    assert client.get("/chat/commands").json() == COMMAND_PROMPTS
+
+
 # --- auth-required endpoints ---------------------------------------------
 
 def test_expenses_endpoint_requires_auth():

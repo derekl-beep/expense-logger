@@ -293,3 +293,23 @@ SUGGESTED_PROMPTS = [
     {"label": "Recurring charges", "prompt": "What are my recurring or subscription charges?"},
     {"label": "Budget status", "prompt": "Am I over budget on anything this month?"},
 ]
+
+# Full "/" command palette — one entry per read-only query tool, so all of them
+# are discoverable, not just the handful surfaced as suggestion chips above.
+# Each entry's "tool" field is asserted (tests/test_tools.py) to reference a
+# real name in TOOL_HANDLERS, so this can't silently drift from what the agent
+# actually supports.
+COMMAND_PROMPTS = [
+    {"command": "/summary", "label": "Summarize this month", "prompt": "Summarize this month by category, with a total.", "tool": "get_category_breakdown"},
+    {"command": "/recent", "label": "Recent expenses", "prompt": "Show me my 10 most recent expenses.", "tool": "get_expenses"},
+    {"command": "/trend", "label": "Spending trend", "prompt": "How has my dining spending trended over the last few months?", "tool": "get_monthly_trend"},
+    {"command": "/runrate", "label": "Run rate", "prompt": "What's my dining run rate this month, compared to last month?", "tool": "get_run_rate"},
+    {"command": "/pace", "label": "Weekly pace", "prompt": "Am I on pace this week compared to last week?", "tool": "get_weekly_pace"},
+    {"command": "/yoy", "label": "Year over year", "prompt": "Is this month higher than the same month last year?", "tool": "get_yoy_comparison"},
+    {"command": "/top", "label": "Biggest purchases", "prompt": "What are my biggest purchases this month?", "tool": "get_top_expenses"},
+    {"command": "/recurring", "label": "Recurring charges", "prompt": "What are my recurring or subscription charges?", "tool": "get_recurring_expenses"},
+    {"command": "/whospends", "label": "Who's spending more", "prompt": "Who's spending more this month?", "tool": "get_user_breakdown"},
+    {"command": "/weekday", "label": "Weekday pattern", "prompt": "What days of the week do I spend the most on?", "tool": "get_weekday_pattern"},
+    {"command": "/average", "label": "Average transaction", "prompt": "What's my average transaction amount?", "tool": "get_average_transaction"},
+    {"command": "/budget", "label": "Budget status", "prompt": "Am I over budget on anything this month?", "tool": "get_budget_status"},
+]

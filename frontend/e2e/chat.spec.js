@@ -87,6 +87,52 @@ test("a category breakdown tool result renders as a rich card, not a markdown ta
   await expect(page.getByText("$199.75", { exact: true })).toBeVisible();
 });
 
+test("typing / opens a command palette that filters as you type and sends on click", async ({ page }) => {
+  const input = page.getByPlaceholder("e.g. $5 coffee today");
+
+  await input.fill("/");
+  await expect(page.getByText("/summary", { exact: true })).toBeVisible();
+  await expect(page.getByText("/recurring", { exact: true })).toBeVisible();
+
+  await input.fill("/budg");
+  await expect(page.getByText("/budget", { exact: true })).toBeVisible();
+  await expect(page.getByText("/summary", { exact: true })).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Budget status /budget" }).click();
+
+  await expect(input).toHaveValue("");
+  await expect(page.getByText("Budget status", { exact: true })).toBeVisible();
+});
+
+test("arrow-key navigation re-clamps when the filtered list shrinks then grows back", async ({ page }) => {
+  const input = page.getByPlaceholder("e.g. $5 coffee today");
+  await input.fill("/");
+  for (let i = 0; i < 5; i++) await input.press("ArrowDown");
+
+  // Narrow to a single match, then press ArrowUp — a no-op on a one-item list.
+  await input.fill("/yoy");
+  await expect(page.getByRole("button", { name: "Year over year /yoy" })).toBeVisible();
+  await input.press("ArrowUp");
+
+  // Widen back to the full list: the highlighted row must be the first one
+  // (index re-clamped by the ArrowUp fix), not wherever a stale raw index
+  // from before narrowing would land.
+  await input.fill("/");
+  const firstRow = page.locator("button", { hasText: "/summary" });
+  await expect(firstRow).toHaveClass(/bg-muted/);
+});
+
+test("Escape clears the input and closes the command palette", async ({ page }) => {
+  const input = page.getByPlaceholder("e.g. $5 coffee today");
+  await input.fill("/sum");
+  await expect(page.getByText("/summary", { exact: true })).toBeVisible();
+
+  await input.press("Escape");
+
+  await expect(input).toHaveValue("");
+  await expect(page.getByText("/summary", { exact: true })).toHaveCount(0);
+});
+
 test("attaching an image shows a preview thumbnail that can be removed", async ({ page }) => {
   await page.locator('input[type="file"]').setInputFiles({
     name: "receipt.png",
