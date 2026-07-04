@@ -1,14 +1,23 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Chat from "./components/Chat";
 import ExpenseTable from "./components/ExpenseTable";
 import Login from "./components/Login";
 import { Toaster } from "./components/ui/sonner";
+
+const HIGHLIGHT_MS = 2000;
 
 export default function App() {
   const [token, setToken] = useState(() => localStorage.getItem("token"));
   const [username, setUsername] = useState(() => localStorage.getItem("username") || "");
   const [expenses, setExpenses] = useState([]);
   const [expensesLoading, setExpensesLoading] = useState(true);
+  const [highlightIds, setHighlightIds] = useState(() => new Set());
+  const highlightTimeoutRef = useRef(null);
+  // Diff baseline for row highlighting — a ref (not the `expenses` state
+  // closure) so concurrent fetches always compare against the most
+  // recently known list, and null distinguishes "not loaded yet" from
+  // "loaded, zero expenses" (both would otherwise read as length === 0).
+  const lastKnownExpensesRef = useRef(null);
   const [activeTab, setActiveTab] = useState(() => localStorage.getItem("activeTab") || "chat");
   const [dark, setDark] = useState(() => localStorage.getItem("theme") === "dark");
 
@@ -40,7 +49,36 @@ export default function App() {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (res.status === 401) { handleLogout(); return; }
-    setExpenses(await res.json());
+    const data = await res.json();
+
+    // Flash rows that are new or changed since the last fetch, so a
+    // chat-driven save/edit visibly lands in the table instead of the
+    // list silently refreshing underneath the user.
+    if (lastKnownExpensesRef.current !== null) {
+      const prevById = new Map(lastKnownExpensesRef.current.map((e) => [e.id, e]));
+      const changed = new Set();
+      for (const e of data) {
+        const old = prevById.get(e.id);
+        if (
+          !old ||
+          old.amount !== e.amount ||
+          old.category !== e.category ||
+          old.description !== e.description ||
+          old.date !== e.date ||
+          !!old.flagged !== !!e.flagged
+        ) {
+          changed.add(e.id);
+        }
+      }
+      if (changed.size > 0) {
+        setHighlightIds(changed);
+        clearTimeout(highlightTimeoutRef.current);
+        highlightTimeoutRef.current = setTimeout(() => setHighlightIds(new Set()), HIGHLIGHT_MS);
+      }
+    }
+
+    lastKnownExpensesRef.current = data;
+    setExpenses(data);
     setExpensesLoading(false);
   };
 
@@ -57,6 +95,7 @@ export default function App() {
       }
       const data = await res.json();
       if (!ignore) {
+        lastKnownExpensesRef.current = data;
         setExpenses(data);
         setExpensesLoading(false);
       }
@@ -101,6 +140,7 @@ export default function App() {
             onExpenseChange={fetchExpenses}
             onUnauthorized={handleLogout}
             loading={expensesLoading}
+            highlightIds={highlightIds}
           />
         </div>
 

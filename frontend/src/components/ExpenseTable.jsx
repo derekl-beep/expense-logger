@@ -463,7 +463,7 @@ const BudgetDialog = ({ categories, budgetMap, authFetch, onSaved }) => {
   );
 };
 
-export default function ExpenseTable({ expenses, className = "", token, onExpenseChange, onUnauthorized, loading = false }) {
+export default function ExpenseTable({ expenses, className = "", token, onExpenseChange, onUnauthorized, loading = false, highlightIds }) {
   const authFetch = (url, opts = {}) => {
     const res = fetch(url, { ...opts, headers: { ...opts.headers, Authorization: `Bearer ${token}` } });
     res.then((r) => { if (r.status === 401) onUnauthorized(); });
@@ -909,7 +909,10 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
               </div>
               {items.map((e) => (
                 <SwipeableRow key={e.id} onSwipeRight={() => toggleFlag(e)} onSwipeLeft={() => setDeleteConfirm(e)}>
-                  <div className="flex items-center gap-3 px-4 py-3 border-b border-border/50 active:bg-muted transition-colors cursor-pointer" onClick={() => openEdit(e)}>
+                  <div
+                    className={`flex items-center gap-3 px-4 py-3 border-b border-border/50 active:bg-muted transition-colors cursor-pointer ${highlightIds?.has(e.id) ? "row-highlight" : ""}`}
+                    onClick={() => openEdit(e)}
+                  >
                     <CategoryBadge
                       category={e.category}
                       small
@@ -952,7 +955,7 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
               <tr><td colSpan={6} className="text-center py-16 text-muted-foreground text-sm">{emptyMessage}</td></tr>
             ) : filtered.map((e) => (
               <tr key={e.id}
-                className="border-b border-border/50 hover:bg-muted/50 cursor-pointer group transition-colors"
+                className={`border-b border-border/50 hover:bg-muted/50 cursor-pointer group transition-colors ${highlightIds?.has(e.id) ? "row-highlight" : ""}`}
                 onClick={() => openEdit(e)}
               >
                 <td className="px-4 py-3 text-xs text-muted-foreground tabular-nums whitespace-nowrap">{formatDate(e.date)}</td>

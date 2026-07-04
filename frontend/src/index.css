@@ -134,3 +134,13 @@ html, body {
     font-size: 16px !important;
   }
 }
+
+/* Flashes an expense row when the agent adds/changes it via chat, so a
+   save doesn't just silently appear in a refetched list. */
+@keyframes row-highlight {
+  0% { background-color: color-mix(in oklch, var(--primary) 18%, transparent); }
+  100% { background-color: transparent; }
+}
+.row-highlight {
+  animation: row-highlight 2s ease-out;
+}
