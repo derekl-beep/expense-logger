@@ -69,6 +69,28 @@ MODEL_VISION = "claude-sonnet-4-6"  # better accuracy for reading text in images
 
 MAX_IMAGES = 6
 
+# Friendly status labels shown in the UI while a tool call is in flight.
+TOOL_STATUS_LABELS = {
+    "save_expense": "Saving expense…",
+    "find_similar_expense": "Checking vendor history…",
+    "update_expense": "Updating expense…",
+    "delete_expense": "Deleting expense…",
+    "get_expenses": "Looking up expenses…",
+    "get_category_breakdown": "Calculating breakdown…",
+    "get_monthly_trend": "Analyzing spending trend…",
+    "get_run_rate": "Projecting month-end total…",
+    "get_weekly_pace": "Projecting week pace…",
+    "get_yoy_comparison": "Comparing to last year…",
+    "get_top_expenses": "Finding top expenses…",
+    "get_user_breakdown": "Comparing spending by person…",
+    "get_weekday_pattern": "Analyzing day-of-week pattern…",
+    "get_budget_status": "Checking budget status…",
+    "set_budget": "Updating budget…",
+    "delete_budget": "Removing budget…",
+    "get_average_transaction": "Calculating average…",
+    "get_recurring_expenses": "Checking recurring charges…",
+}
+
 
 def _trim_session(messages: list) -> None:
     """Drop oldest messages when history grows beyond _SESSION_CAP to bound memory use."""
@@ -105,7 +127,7 @@ def _build_user_content(user_input: str, images: list[dict] | None) -> str:
     return "\n\n".join(parts)
 
 
-def _run_tools(response_content: list, user_id: int) -> list:
+def _run_tools(response_content: list, user_id: int, on_result=None) -> list:
     tool_results = []
     for block in response_content:
         if block.type == "tool_use":
@@ -114,6 +136,8 @@ def _run_tools(response_content: list, user_id: int) -> list:
                 kwargs["user_id"] = user_id
             result = TOOL_HANDLERS[block.name](**kwargs)
             print(f"[tool] {block.name}({kwargs}) -> {result}")
+            if on_result:
+                on_result(block.name, result)
             tool_results.append({
                 "type": "tool_result",
                 "tool_use_id": block.id,
@@ -156,6 +180,8 @@ def chat(user_input: str, user_id: int, username: str = "user", images: list[dic
 
 def stream_chat(user_input: str, user_id: int, username: str = "user", images: list[dict] | None = None):
     messages = _sessions.setdefault(str(user_id), [])
+    if images:
+        yield {"status": "Reading image…" if len(images) == 1 else "Reading images…"}
     content = _build_user_content(user_input, images)
     messages.append({"role": "user", "content": content})
     _trim_session(messages)
@@ -180,8 +206,8 @@ def stream_chat(user_input: str, user_id: int, username: str = "user", images: l
                 # chunks within a single turn are exact slices of one continuous
                 # string and always join up correctly on their own.
                 if first_chunk_of_turn and last_char and not last_char.isspace() and not chunk[0].isspace():
-                    yield " "
-                yield chunk
+                    yield {"text": " "}
+                yield {"text": chunk}
                 last_char = chunk[-1]
                 first_chunk_of_turn = False
             final = stream.get_final_message()
@@ -192,8 +218,19 @@ def stream_chat(user_input: str, user_id: int, username: str = "user", images: l
             break
 
         if final.stop_reason == "tool_use":
-            tool_results = _run_tools(final.content, user_id)
+            for block in final.content:
+                if block.type == "tool_use":
+                    yield {"status": TOOL_STATUS_LABELS.get(block.name, "Working…")}
+
+            rich_events = []
+
+            def _capture_rich_result(name, result):
+                if name == "get_category_breakdown":
+                    rich_events.append({"breakdown": result})
+
+            tool_results = _run_tools(final.content, user_id, on_result=_capture_rich_result)
             messages.append({"role": "user", "content": tool_results})
+            yield from rich_events
 
 
 if __name__ == "__main__":

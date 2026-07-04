@@ -27,7 +27,7 @@ from agent.db import (
     update_expense,
 )
 from agent.main import clear_session, stream_chat
-from agent.tools import SUGGESTED_PROMPTS
+from agent.tools import COMMAND_PROMPTS, SUGGESTED_PROMPTS
 from api.auth import create_token, get_current_user, get_current_username, verify_password
 
 logger = logging.getLogger(__name__)
@@ -95,8 +95,8 @@ def chat_stream_endpoint(
 ):
     def generate():
         try:
-            for chunk in stream_chat(req.message, user_id, username, _images_payload(req)):
-                yield f"data: {json.dumps({'text': chunk})}\n\n"
+            for event in stream_chat(req.message, user_id, username, _images_payload(req)):
+                yield f"data: {json.dumps(event)}\n\n"
         except Exception:
             logger.error("stream_chat error:\n%s", traceback.format_exc())
             yield f"data: {json.dumps({'error': 'Something went wrong. Please try again.'})}\n\n"
@@ -153,6 +153,11 @@ def delete_budget_endpoint(category: str, user_id: int = Depends(get_current_use
 @app.get("/chat/suggestions")
 def chat_suggestions_endpoint():
     return SUGGESTED_PROMPTS
+
+
+@app.get("/chat/commands")
+def chat_commands_endpoint():
+    return COMMAND_PROMPTS
 
 
 class UpdateRequest(BaseModel):
