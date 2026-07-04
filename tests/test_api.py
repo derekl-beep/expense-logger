@@ -262,3 +262,31 @@ def test_check_rate_limit_blocks_once_daily_limit_is_reached(user_id):
         server.check_rate_limit(user_id=user_id)
 
     assert exc_info.value.status_code == 429
+
+
+# --- resolve_static_file (SPA fallback vs. real static files) ---------------
+# Doesn't depend on frontend/dist actually being built (the backend CI job
+# never runs `npm run build`), unlike the /{full_path:path} route itself,
+# which only gets registered when frontend/dist happens to exist.
+
+def test_resolve_static_file_finds_a_real_file(tmp_path):
+    (tmp_path / "manifest.webmanifest").write_text("{}")
+
+    assert server.resolve_static_file(tmp_path, "manifest.webmanifest") == tmp_path / "manifest.webmanifest"
+
+
+def test_resolve_static_file_returns_none_for_a_spa_route_with_no_matching_file(tmp_path):
+    assert server.resolve_static_file(tmp_path, "some/client/side/route") is None
+
+
+def test_resolve_static_file_returns_none_for_empty_path(tmp_path):
+    assert server.resolve_static_file(tmp_path, "") is None
+
+
+def test_resolve_static_file_blocks_path_traversal_outside_static_dir(tmp_path):
+    outside = tmp_path.parent / "secret.txt"
+    outside.write_text("shh")
+    try:
+        assert server.resolve_static_file(tmp_path, "../secret.txt") is None
+    finally:
+        outside.unlink()

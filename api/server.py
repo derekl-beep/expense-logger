@@ -221,6 +221,17 @@ def expenses_export(user_id: int = Depends(get_current_user)):
     )
 
 
+def resolve_static_file(static_dir: Path, full_path: str) -> Path | None:
+    """Real file at full_path within static_dir, or None if it doesn't exist
+    or would escape static_dir (path traversal via "../" in full_path)."""
+    if not full_path:
+        return None
+    candidate = (static_dir / full_path).resolve()
+    if candidate.is_file() and candidate.is_relative_to(static_dir.resolve()):
+        return candidate
+    return None
+
+
 # Serve React build — must be mounted after all API routes
 _static = Path(__file__).parent.parent / "frontend" / "dist"
 if _static.exists():
@@ -228,4 +239,9 @@ if _static.exists():
 
     @app.get("/{full_path:path}")
     def spa_fallback(full_path: str):
-        return FileResponse(_static / "index.html")
+        # Files Vite copies verbatim from public/ (manifest, icons, sw.js)
+        # live at the dist root, not under /assets — serve them directly
+        # when the path matches a real file; only fall back to index.html
+        # for actual client-side routes.
+        static_file = resolve_static_file(_static, full_path)
+        return FileResponse(static_file) if static_file else FileResponse(_static / "index.html")
