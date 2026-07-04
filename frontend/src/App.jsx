@@ -165,6 +165,7 @@ export default function App() {
               className={activeTab === "expenses" ? "flex" : "hidden md:flex"}
               expenses={expenses}
               token={token}
+              username={username}
               onExpenseChange={fetchExpenses}
               onUnauthorized={handleLogout}
               loading={expensesLoading}

@@ -15,6 +15,15 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 E2E_USERNAME = "e2e_test"
 E2E_PASSWORD = "e2e_test_pass123"
 
+# Second household member — used only by new-activity.spec.js to exercise the
+# "new activity since you left" indicator, which requires an expense logged
+# by someone other than E2E_USERNAME. Kept to a single, unbudgeted category
+# (Subscription) so it doesn't shift any budget-vs-spend percentage other
+# specs assert on (it does nudge category-breakdown share percentages via
+# the larger grand total, but no spec currently asserts those exactly).
+E2E_HOUSEMATE_USERNAME = "e2e_housemate"
+E2E_HOUSEMATE_PASSWORD = "e2e_housemate_pass123"
+
 DATABASE_URL = os.environ.setdefault(
     "DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/expense_logger_test"
 )
@@ -88,6 +97,11 @@ def seed():
     ]
     for amount, category, description, day in expenses:
         save_expense(amount, category, description, day, user_id=user_id)
+
+    create_user(E2E_HOUSEMATE_USERNAME, bcrypt.hashpw(E2E_HOUSEMATE_PASSWORD.encode(), bcrypt.gensalt()).decode())
+    cur = _run("SELECT id FROM users WHERE username = %s", (E2E_HOUSEMATE_USERNAME,))
+    housemate_id = cur.fetchone()["id"]
+    save_expense(9.99, "Subscription", "Cloud Storage", _today_minus(1), user_id=housemate_id)
 
 
 if __name__ == "__main__":

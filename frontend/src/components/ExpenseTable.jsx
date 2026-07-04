@@ -298,11 +298,47 @@ const BudgetDialog = ({ categories, budgetMap, spendByCategory, authFetch, onSav
   );
 };
 
-export default function ExpenseTable({ expenses, className = "", token, onExpenseChange, onUnauthorized, loading = false, highlightIds }) {
+export default function ExpenseTable({ expenses, className = "", token, username, onExpenseChange, onUnauthorized, loading = false, highlightIds }) {
   const authFetch = (url, opts = {}) => {
     const res = fetch(url, { ...opts, headers: { ...opts.headers, Authorization: `Bearer ${token}` } });
     res.then((r) => { if (r.status === 401) onUnauthorized(); });
     return res;
+  };
+
+  // "New activity since you left" — entirely derived from the /expenses
+  // list already being fetched, no new endpoint or push infra. Baseline
+  // (highest expense id seen) is per-username in localStorage; the first
+  // time it's set (no stored value yet) we snapshot the current max
+  // instead of treating all existing history as "new".
+  const lastSeenKey = `expenses_last_seen_id_${username}`;
+  const [lastSeenId, setLastSeenId] = useState(() => {
+    const stored = localStorage.getItem(lastSeenKey);
+    return stored ? parseInt(stored, 10) : null;
+  });
+
+  useEffect(() => {
+    if (lastSeenId === null && expenses.length > 0) {
+      const maxId = Math.max(...expenses.map((e) => e.id));
+      localStorage.setItem(lastSeenKey, String(maxId));
+      // Guarded by lastSeenId === null above, so this runs at most once per
+      // mount (not a cascading-render loop) — the case react-hooks/set-state-
+      // in-effect exists to catch. eslint-disable-next-line rather than a
+      // fake async deferral just to dodge the rule.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setLastSeenId(maxId);
+    }
+  }, [expenses, lastSeenId, lastSeenKey]);
+
+  const newFromOthers = useMemo(
+    () => (lastSeenId == null ? [] : expenses.filter((e) => e.logged_by && e.logged_by !== username && e.id > lastSeenId)),
+    [expenses, lastSeenId, username]
+  );
+  const newActivityNames = [...new Set(newFromOthers.map((e) => e.logged_by))];
+
+  const dismissNewActivity = () => {
+    const maxId = Math.max(lastSeenId ?? 0, ...expenses.map((e) => e.id));
+    localStorage.setItem(lastSeenKey, String(maxId));
+    setLastSeenId(maxId);
   };
 
   const [selectedMonthOverride, setSelectedMonthOverride] = useState(null);
@@ -669,6 +705,25 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
           </div>
         </div>
       </div>
+
+      {/* New activity since you left — household awareness, derived purely
+          from data already fetched via /expenses (no new endpoint/infra). */}
+      {newFromOthers.length > 0 && (
+        <div className="mx-4 mt-3 md:mx-5 shrink-0 rounded-xl border border-border bg-muted/40 px-3 py-2 flex items-center gap-2">
+          <span className="flex-1 text-xs text-foreground">
+            <span className="font-semibold">{newFromOthers.length}</span> new expense{newFromOthers.length !== 1 ? "s" : ""} from{" "}
+            {newActivityNames.join(" & ")} since you were last here
+          </span>
+          <button
+            type="button"
+            onClick={dismissNewActivity}
+            aria-label="Dismiss new activity notice"
+            className="shrink-0 rounded text-muted-foreground outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 text-sm leading-none"
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       <div className="relative flex-1 overflow-hidden">
       <div ref={listRef} onScroll={handleListScroll} className="h-full overflow-y-auto overscroll-contain">
