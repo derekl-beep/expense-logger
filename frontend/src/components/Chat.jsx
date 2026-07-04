@@ -28,6 +28,16 @@ const SpeechRecognitionAPI =
 
 const storageKey = (username) => `chat_messages_${username}`;
 
+// Local (not UTC) calendar date, so "dismissed for today" lines up with the
+// user's actual day — toISOString() alone would roll over at UTC midnight,
+// which is mid-afternoon/evening in US timezones.
+function localDateString(d = new Date()) {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 function loadMessages(username) {
   try {
     const saved = JSON.parse(localStorage.getItem(storageKey(username)) || "[]");
@@ -168,6 +178,36 @@ export default function Chat({ onExpenseChange, className = "", token, username,
     fetch("/chat/suggestions").then((r) => r.json()).then(setSuggestions).catch(() => {});
     fetch("/chat/commands").then((r) => r.json()).then(setCommands).catch(() => {});
   }, []);
+
+  // Proactive budget insights: a calm, dismissible note (not a modal, not an
+  // agent message — no LLM call involved) for categories at or near their
+  // monthly limit. Dismissal is remembered for the day, not forever, so a
+  // still-relevant warning doesn't just vanish once and never come back.
+  const [insights, setInsights] = useState([]);
+  const insightsDismissKey = `insights_dismissed_${username}_${localDateString()}`;
+  const [insightsDismissed, setInsightsDismissed] = useState(() => {
+    try {
+      return localStorage.getItem(insightsDismissKey) === "1";
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    fetch("/insights", { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => (r.ok ? r.json() : []))
+      .then(setInsights)
+      .catch(() => {});
+  }, [token]);
+
+  const dismissInsights = () => {
+    setInsightsDismissed(true);
+    try {
+      localStorage.setItem(insightsDismissKey, "1");
+    } catch {
+      // localStorage unavailable — dismissal just won't persist across reloads
+    }
+  };
 
   // Typing "/" opens a command palette listing every analytics tool, not just
   // the handful surfaced as suggestion chips.
@@ -477,6 +517,31 @@ export default function Chat({ onExpenseChange, className = "", token, username,
           </DropdownMenu>
         </div>
       </div>
+
+      {!insightsDismissed && insights.length > 0 && (
+        <div className="mx-4 mt-3 rounded-xl border border-border bg-muted/40 px-3 py-2.5 shrink-0">
+          <div className="flex items-start gap-2.5">
+            <div className="shrink-0 w-6 h-6 rounded-full bg-muted text-muted-foreground flex items-center justify-center mt-0.5">
+              <Bot className="w-3.5 h-3.5" />
+            </div>
+            <div className="flex-1 min-w-0 space-y-1">
+              {insights.map((i) => (
+                <p key={i.category} className="text-xs text-foreground leading-relaxed">
+                  <span className={`font-semibold ${i.over_budget ? "text-red-600 dark:text-red-400" : "text-amber-600 dark:text-amber-400"}`}>
+                    {i.category}
+                  </span>
+                  {" "}is at {i.pct_used.toFixed(0)}% of budget (${i.spent.toFixed(0)} of ${i.monthly_limit.toFixed(0)})
+                </p>
+              ))}
+            </div>
+            <button
+              onClick={dismissInsights}
+              aria-label="Dismiss budget insights"
+              className="shrink-0 text-muted-foreground hover:text-foreground text-sm leading-none mt-0.5"
+            >×</button>
+          </div>
+        </div>
+      )}
 
       {/* Messages */}
       <div className="relative flex-1 overflow-hidden">

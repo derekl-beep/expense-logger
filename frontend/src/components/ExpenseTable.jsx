@@ -129,7 +129,7 @@ const sortCategoriesByBudget = (categories, budgetMap) => {
   return [...budgeted, ...unbudgeted];
 };
 
-const BudgetSettings = ({ categories, budgetMap, authFetch, onSaved }) => {
+const BudgetSettings = ({ categories, budgetMap, spendByCategory, authFetch, onSaved }) => {
   const [values, setValues] = useState(() => valuesFromBudgetMap(categories, budgetMap));
   const [syncedBudgetMap, setSyncedBudgetMap] = useState(budgetMap);
   const [orderedCategories, setOrderedCategories] = useState(() => sortCategoriesByBudget(categories, budgetMap));
@@ -180,32 +180,61 @@ const BudgetSettings = ({ categories, budgetMap, authFetch, onSaved }) => {
   };
 
   return (
-    <div className="space-y-1 max-h-[60vh] overflow-y-auto -mx-1 px-1">
-      {orderedCategories.map((category) => (
-        <div key={category} className="flex items-center gap-2 py-1">
-          <CategoryBadge category={category} small />
-          <span className="text-sm text-foreground flex-1 truncate">{category}</span>
-          <div className="relative w-24 shrink-0">
-            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">$</span>
-            <Input
-              type="number"
-              inputMode="decimal"
-              step="1"
-              min="0"
-              placeholder="—"
-              value={values[category] ?? ""}
-              onChange={(e) => setValues((v) => ({ ...v, [category]: e.target.value }))}
-              onBlur={() => handleBlur(category)}
-              className="h-8 text-sm pl-5 text-right"
-            />
+    <div className="space-y-2 max-h-[60vh] overflow-y-auto -mx-1 px-1">
+      {orderedCategories.map((category) => {
+        const limit = budgetMap[category];
+        const spent = spendByCategory?.[category] ?? 0;
+        // spendByCategory is omitted entirely when the table is filtered to
+        // "All time" — its totals would be lifetime, not monthly, spend, so
+        // suppress the indicator rather than show a misleading comparison.
+        const hasBudget = limit != null && spendByCategory != null;
+        const usedPct = hasBudget && limit > 0 ? (spent / limit) * 100 : 0;
+        const statusLevel = !hasBudget ? "none" : usedPct > 100 ? "over" : usedPct >= 80 ? "near" : "ok";
+        const barColor = statusLevel === "over" ? "bg-red-500" : statusLevel === "near" ? "bg-amber-500" : "bg-foreground/40";
+        const textColor = statusLevel === "over"
+          ? "text-red-600 dark:text-red-400"
+          : statusLevel === "near"
+          ? "text-amber-600 dark:text-amber-400"
+          : "text-muted-foreground";
+        return (
+          <div key={category} className="py-1">
+            <div className="flex items-center gap-2">
+              <CategoryBadge category={category} small />
+              <span className="text-sm text-foreground flex-1 truncate">{category}</span>
+              <div className="relative w-24 shrink-0">
+                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">$</span>
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  step="1"
+                  min="0"
+                  placeholder="—"
+                  value={values[category] ?? ""}
+                  onChange={(e) => setValues((v) => ({ ...v, [category]: e.target.value }))}
+                  onBlur={() => handleBlur(category)}
+                  className="h-8 text-sm pl-5 text-right"
+                />
+              </div>
+            </div>
+            {hasBudget && (
+              <div className="flex items-center gap-2 mt-1 pl-8">
+                <div className="relative flex-1 h-1 rounded-full bg-muted overflow-hidden">
+                  <div
+                    className={`absolute inset-y-0 left-0 rounded-full transition-[width] duration-300 ease-out ${barColor}`}
+                    style={{ width: `${Math.min(usedPct, 100)}%` }}
+                  />
+                </div>
+                <span className={`text-xs tabular-nums ${textColor}`}>${spent.toFixed(0)} spent</span>
+              </div>
+            )}
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 };
 
-const BudgetDialog = ({ categories, budgetMap, authFetch, onSaved }) => {
+const BudgetDialog = ({ categories, budgetMap, spendByCategory, authFetch, onSaved }) => {
   const [open, setOpen] = useState(false);
   const isDesktop = useMediaQuery("(min-width: 768px)");
 
@@ -213,19 +242,38 @@ const BudgetDialog = ({ categories, budgetMap, authFetch, onSaved }) => {
     <button
       type="button"
       title="Manage budgets"
-      className="w-7 h-7 flex items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+      className="w-7 h-7 flex items-center justify-center rounded-md border border-transparent text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 transition-colors"
     >
       <Wallet className="w-3.5 h-3.5" />
     </button>
   );
 
-  const form = <BudgetSettings categories={categories} budgetMap={budgetMap} authFetch={authFetch} onSaved={onSaved} />;
+  const form = (
+    <BudgetSettings
+      categories={categories}
+      budgetMap={budgetMap}
+      spendByCategory={spendByCategory}
+      authFetch={authFetch}
+      onSaved={onSaved}
+    />
+  );
 
   if (isDesktop) {
     return (
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogTrigger asChild>{trigger}</DialogTrigger>
-        <DialogContent className="sm:max-w-sm" onOpenAutoFocus={(e) => e.preventDefault()}>
+        <DialogContent
+          className="sm:max-w-sm"
+          onOpenAutoFocus={(e) => {
+            // Don't let Radix autofocus the first budget input — that pops
+            // the mobile keyboard immediately on open. Focus the dialog
+            // container itself instead (it's a valid, non-input focus
+            // target per the ARIA dialog pattern) so keyboard/screen-reader
+            // users still land inside the dialog rather than nowhere.
+            e.preventDefault();
+            e.currentTarget.focus();
+          }}
+        >
           <DialogHeader>
             <DialogTitle className="text-sm font-semibold">Manage Budgets</DialogTitle>
             <DialogDescription className="sr-only">Set monthly spending limits per category</DialogDescription>
@@ -250,11 +298,47 @@ const BudgetDialog = ({ categories, budgetMap, authFetch, onSaved }) => {
   );
 };
 
-export default function ExpenseTable({ expenses, className = "", token, onExpenseChange, onUnauthorized, loading = false, highlightIds }) {
+export default function ExpenseTable({ expenses, className = "", token, username, onExpenseChange, onUnauthorized, loading = false, highlightIds }) {
   const authFetch = (url, opts = {}) => {
     const res = fetch(url, { ...opts, headers: { ...opts.headers, Authorization: `Bearer ${token}` } });
     res.then((r) => { if (r.status === 401) onUnauthorized(); });
     return res;
+  };
+
+  // "New activity since you left" — entirely derived from the /expenses
+  // list already being fetched, no new endpoint or push infra. Baseline
+  // (highest expense id seen) is per-username in localStorage; the first
+  // time it's set (no stored value yet) we snapshot the current max
+  // instead of treating all existing history as "new".
+  const lastSeenKey = `expenses_last_seen_id_${username}`;
+  const [lastSeenId, setLastSeenId] = useState(() => {
+    const stored = localStorage.getItem(lastSeenKey);
+    return stored ? parseInt(stored, 10) : null;
+  });
+
+  useEffect(() => {
+    if (lastSeenId === null && expenses.length > 0) {
+      const maxId = Math.max(...expenses.map((e) => e.id));
+      localStorage.setItem(lastSeenKey, String(maxId));
+      // Guarded by lastSeenId === null above, so this runs at most once per
+      // mount (not a cascading-render loop) — the case react-hooks/set-state-
+      // in-effect exists to catch. eslint-disable-next-line rather than a
+      // fake async deferral just to dodge the rule.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setLastSeenId(maxId);
+    }
+  }, [expenses, lastSeenId, lastSeenKey]);
+
+  const newFromOthers = useMemo(
+    () => (lastSeenId == null ? [] : expenses.filter((e) => e.logged_by && e.logged_by !== username && e.id > lastSeenId)),
+    [expenses, lastSeenId, username]
+  );
+  const newActivityNames = [...new Set(newFromOthers.map((e) => e.logged_by))];
+
+  const dismissNewActivity = () => {
+    const maxId = Math.max(lastSeenId ?? 0, ...expenses.map((e) => e.id));
+    localStorage.setItem(lastSeenKey, String(maxId));
+    setLastSeenId(maxId);
   };
 
   const [selectedMonthOverride, setSelectedMonthOverride] = useState(null);
@@ -449,7 +533,17 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
 
       {/* Edit modal — shared between mobile and desktop */}
       <Dialog open={!!editingExpense} onOpenChange={(open) => { if (!open) setEditingExpense(null); }}>
-        <DialogContent className="sm:max-w-sm" onOpenAutoFocus={(e) => e.preventDefault()}>
+        <DialogContent
+          className="sm:max-w-sm"
+          onOpenAutoFocus={(e) => {
+            // Same rationale as BudgetDialog: skip autofocusing the
+            // Description input (avoids an immediate mobile keyboard pop),
+            // but still move focus into the dialog itself rather than
+            // leaving it stranded on the now-inert trigger behind the modal.
+            e.preventDefault();
+            e.currentTarget.focus();
+          }}
+        >
           <DialogHeader>
             <DialogTitle className="text-sm font-semibold">Edit Expense</DialogTitle>
             <DialogDescription className="sr-only">Edit the details of this expense</DialogDescription>
@@ -478,7 +572,7 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
                         const amt = parseFloat(v.amount);
                         return Number.isFinite(amt) ? { ...v, amount: Math.round((amt / n) * 100) / 100 } : v;
                       })}
-                      className="text-xs px-1.5 py-0.5 rounded border border-border text-muted-foreground hover:bg-muted transition-colors"
+                      className="text-xs px-1.5 py-0.5 rounded border border-border text-muted-foreground outline-none hover:bg-muted focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 transition-colors"
                     >
                       {["½", "⅓", "¼"][n - 2]}
                     </button>
@@ -501,11 +595,12 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
               </Select>
             </div>
             <button
+              type="button"
               onClick={() => setEditValues({ ...editValues, flagged: !editValues.flagged })}
-              className={`flex items-center gap-2 text-xs px-3 py-2 rounded-md border w-full transition-colors ${
+              className={`flex items-center gap-2 text-xs px-3 py-2 rounded-md border w-full outline-none focus-visible:ring-3 focus-visible:ring-ring/50 transition-colors ${
                 editValues.flagged
-                  ? "border-amber-400 bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-700"
-                  : "border-border text-muted-foreground hover:bg-muted"
+                  ? "border-amber-400 bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-700 focus-visible:border-amber-500"
+                  : "border-border text-muted-foreground hover:bg-muted focus-visible:border-ring"
               }`}
             >
               <span>⚑</span>
@@ -611,6 +706,25 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
         </div>
       </div>
 
+      {/* New activity since you left — household awareness, derived purely
+          from data already fetched via /expenses (no new endpoint/infra). */}
+      {newFromOthers.length > 0 && (
+        <div className="mx-4 mt-3 md:mx-5 shrink-0 rounded-xl border border-border bg-muted/40 px-3 py-2 flex items-center gap-2">
+          <span className="flex-1 text-xs text-foreground">
+            <span className="font-semibold">{newFromOthers.length}</span> new expense{newFromOthers.length !== 1 ? "s" : ""} from{" "}
+            {newActivityNames.join(" & ")} since you were last here
+          </span>
+          <button
+            type="button"
+            onClick={dismissNewActivity}
+            aria-label="Dismiss new activity notice"
+            className="shrink-0 rounded text-muted-foreground outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 text-sm leading-none"
+          >
+            ×
+          </button>
+        </div>
+      )}
+
       <div className="relative flex-1 overflow-hidden">
       <div ref={listRef} onScroll={handleListScroll} className="h-full overflow-y-auto overscroll-contain">
 
@@ -619,7 +733,13 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
           <div className="px-4 py-3 md:px-5 border-b border-border/50">
             <div className="flex items-center justify-between mb-2">
               <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Breakdown</div>
-              <BudgetDialog categories={categories} budgetMap={budgetMap} authFetch={authFetch} onSaved={fetchBudgets} />
+              <BudgetDialog
+                categories={categories}
+                budgetMap={budgetMap}
+                spendByCategory={selectedMonth !== "all" ? categoryTotals : undefined}
+                authFetch={authFetch}
+                onSaved={fetchBudgets}
+              />
             </div>
             <div className="space-y-1.5">
               {(showAllCategories ? breakdown : breakdown.slice(0, 5)).map(({ category, amount, count, pct, barPct, limit }) => (
@@ -662,12 +782,15 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
               <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground transition-transform ${showRecurring ? "rotate-180" : ""}`} />
             </button>
             {showRecurring && (
-              <div className="space-y-1.5 mt-2">
+              <div className="space-y-0.5 mt-2 -mx-1">
                 {recurring.map((r) => (
-                  <div key={`${r.description}-${r.amount}`} className="flex items-center gap-2">
+                  <div
+                    key={`${r.description}-${r.amount}`}
+                    className="flex items-center gap-2 rounded-lg px-1 py-1 hover:bg-muted/50 transition-colors"
+                  >
                     <CategoryBadge category={r.category} small />
                     <span className="text-xs text-foreground flex-1 truncate">{r.description}</span>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded-md font-medium bg-muted text-muted-foreground shrink-0">
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-md font-medium bg-primary/10 text-primary shrink-0">
                       {r.frequency[0].toUpperCase() + r.frequency.slice(1)}
                     </span>
                     <span className="text-xs font-semibold text-foreground tabular-nums shrink-0">${r.amount.toFixed(2)}</span>

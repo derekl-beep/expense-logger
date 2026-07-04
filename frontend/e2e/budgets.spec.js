@@ -7,7 +7,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 const panel = (page) => page.getByRole("dialog");
-const row = (page, category) => panel(page).locator("div.flex.items-center.gap-2.py-1").filter({ hasText: category });
+const row = (page, category) => panel(page).locator("div.py-1").filter({ hasText: category });
 
 test("orders budgeted categories first, then unbudgeted, alphabetically within each group", async ({ page }) => {
   await page.getByTitle("Manage budgets").click();

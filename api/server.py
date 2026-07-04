@@ -18,6 +18,7 @@ from agent.db import (
     delete_budget,
     delete_expense,
     get_api_call_count,
+    get_budget_status,
     get_budgets,
     get_expenses,
     get_recurring_expenses,
@@ -140,6 +141,17 @@ def budgets_endpoint(user_id: int = Depends(get_current_user)):
     return get_budgets()
 
 
+# Matches the "near budget" color threshold already used in the frontend
+# (BreakdownRow / BudgetSettings) — an insight is only worth surfacing
+# unprompted once a category is at least this close to its limit.
+INSIGHT_THRESHOLD_PCT = 80
+
+
+@app.get("/insights")
+def insights_endpoint(user_id: int = Depends(get_current_user)):
+    return [s for s in get_budget_status() if s["pct_used"] >= INSIGHT_THRESHOLD_PCT]
+
+
 @app.put("/budgets/{category}")
 def set_budget_endpoint(category: str, req: BudgetRequest, user_id: int = Depends(get_current_user)):
     return set_budget(category, req.monthly_limit)
@@ -209,6 +221,17 @@ def expenses_export(user_id: int = Depends(get_current_user)):
     )
 
 
+def resolve_static_file(static_dir: Path, full_path: str) -> Path | None:
+    """Real file at full_path within static_dir, or None if it doesn't exist
+    or would escape static_dir (path traversal via "../" in full_path)."""
+    if not full_path:
+        return None
+    candidate = (static_dir / full_path).resolve()
+    if candidate.is_file() and candidate.is_relative_to(static_dir.resolve()):
+        return candidate
+    return None
+
+
 # Serve React build — must be mounted after all API routes
 _static = Path(__file__).parent.parent / "frontend" / "dist"
 if _static.exists():
@@ -216,4 +239,9 @@ if _static.exists():
 
     @app.get("/{full_path:path}")
     def spa_fallback(full_path: str):
-        return FileResponse(_static / "index.html")
+        # Files Vite copies verbatim from public/ (manifest, icons, sw.js)
+        # live at the dist root, not under /assets — serve them directly
+        # when the path matches a real file; only fall back to index.html
+        # for actual client-side routes.
+        static_file = resolve_static_file(_static, full_path)
+        return FileResponse(static_file) if static_file else FileResponse(_static / "index.html")
