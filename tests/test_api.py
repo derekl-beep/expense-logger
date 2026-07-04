@@ -11,7 +11,7 @@ client = TestClient(server.app)
 
 @pytest.fixture
 def auth_headers(user_id):
-    return {"Authorization": f"Bearer {create_token(user_id)}"}
+    return {"Authorization": f"Bearer {create_token(user_id, 'testuser')}"}
 
 
 def add_expense(user_id, amount, category, description, day):

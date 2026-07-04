@@ -21,7 +21,6 @@ from agent.db import (
     get_budgets,
     get_expenses,
     get_recurring_expenses,
-    get_user_by_id,
     get_user_by_username,
     increment_api_call_count,
     set_budget,
@@ -29,7 +28,7 @@ from agent.db import (
 )
 from agent.main import clear_session, stream_chat
 from agent.tools import SUGGESTED_PROMPTS
-from api.auth import create_token, get_current_user, verify_password
+from api.auth import create_token, get_current_user, get_current_username, verify_password
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +70,7 @@ def login(req: LoginRequest):
     user = get_user_by_username(req.username)
     if not user or not verify_password(req.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    return {"token": create_token(user["id"], req.remember), "username": user["username"]}
+    return {"token": create_token(user["id"], user["username"], req.remember), "username": user["username"]}
 
 
 class ImageInput(BaseModel):
@@ -84,19 +83,16 @@ class ChatRequest(BaseModel):
     images: list[ImageInput] | None = None
 
 
-def _get_username(user_id: int) -> str:
-    user = get_user_by_id(user_id)
-    return user["username"] if user else "user"
-
-
 def _images_payload(req: ChatRequest) -> list[dict] | None:
     return [img.model_dump() for img in req.images] if req.images else None
 
 
 @app.post("/chat/stream")
-def chat_stream_endpoint(req: ChatRequest, user_id: int = Depends(check_rate_limit)):
-    username = _get_username(user_id)
-
+def chat_stream_endpoint(
+    req: ChatRequest,
+    user_id: int = Depends(check_rate_limit),
+    username: str = Depends(get_current_username),
+):
     def generate():
         try:
             for chunk in stream_chat(req.message, user_id, username, _images_payload(req)):

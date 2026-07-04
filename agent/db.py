@@ -365,23 +365,39 @@ def get_weekly_pace(category: str = None, reference_date: str = None, compare_we
     week_start = ref - timedelta(days=ref.isoweekday() - 1)  # Monday of ref's week
     days_elapsed = (ref - week_start).days + 1
 
-    def _week_total(start: date, end: date) -> float:
-        query = "SELECT COALESCE(SUM(amount), 0) AS total FROM expenses WHERE date >= %s AND date <= %s AND deleted_at IS NULL"
-        params = [start.isoformat(), end.isoformat()]
-        if category:
-            query += " AND LOWER(category) = LOWER(%s)"
-            params.append(category)
-        cur = _run(query, params)
-        return float(cur.fetchone()["total"])
+    category_filter = ""
+    category_params: list = []
+    if category:
+        category_filter = " AND LOWER(category) = LOWER(%s)"
+        category_params = [category]
 
-    spent_so_far = _week_total(week_start, ref)
+    cur = _run(
+        f"SELECT COALESCE(SUM(amount), 0) AS total FROM expenses WHERE date >= %s AND date <= %s AND deleted_at IS NULL{category_filter}",
+        [week_start.isoformat(), ref.isoformat()] + category_params,
+    )
+    spent_so_far = float(cur.fetchone()["total"])
     projected_total = round(spent_so_far / days_elapsed * 7, 2) if days_elapsed else 0.0
 
-    prior_weeks = []
-    for i in range(1, compare_weeks + 1):
-        w_start = week_start - timedelta(weeks=i)
-        w_end = w_start + timedelta(days=6)
-        prior_weeks.append({"week_start": w_start.isoformat(), "total": _week_total(w_start, w_end)})
+    # Fetch all prior weeks in one query instead of N separate calls.
+    ranges = [
+        (week_start - timedelta(weeks=i), week_start - timedelta(weeks=i) + timedelta(days=6))
+        for i in range(1, compare_weeks + 1)
+    ]
+    select_cols = ", ".join(
+        f"COALESCE(SUM(CASE WHEN date >= %s AND date <= %s THEN amount END), 0) AS w{i}"
+        for i in range(len(ranges))
+    )
+    params: list = []
+    for w_start, w_end in ranges:
+        params.extend([w_start.isoformat(), w_end.isoformat()])
+    row = _run(
+        f"SELECT {select_cols} FROM expenses WHERE deleted_at IS NULL{category_filter}",
+        params + category_params,
+    ).fetchone()
+    prior_weeks = [
+        {"week_start": ranges[i][0].isoformat(), "total": float(row[f"w{i}"])}
+        for i in range(len(ranges))
+    ]
 
     last_week_total = prior_weeks[0]["total"] if prior_weeks else None
     pct_change_vs_last_week = (
