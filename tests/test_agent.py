@@ -200,6 +200,34 @@ def test_stream_chat_runs_tool_then_streams_final_text(monkeypatch):
     assert streams == []
 
 
+def test_stream_chat_emits_breakdown_event_for_category_breakdown_tool(monkeypatch):
+    main.clear_session(9)
+    breakdown_result = {
+        "breakdown": [{"category": "Dining", "total": 42.0, "count": 3, "pct": 100.0}],
+        "grand_total": 42.0,
+    }
+    monkeypatch.setitem(main.TOOL_HANDLERS, "get_category_breakdown", lambda **kw: breakdown_result)
+
+    tool_block = make_block("tool_use", name="get_category_breakdown", input={}, id="tool_1")
+    streams = [
+        FakeStream([], make_response([tool_block], "tool_use")),
+        FakeStream(["Here you go"], make_response([make_block("text", text="Here you go")], "end_turn")),
+    ]
+
+    def fake_stream(**kw):
+        return streams.pop(0)
+
+    monkeypatch.setattr(main.client.messages, "stream", fake_stream)
+
+    events = list(main.stream_chat("breakdown please", user_id=9))
+
+    assert events == [
+        {"status": "Calculating breakdown…"},
+        {"breakdown": breakdown_result},
+        {"text": "Here you go"},
+    ]
+
+
 def test_stream_chat_emits_status_for_unmapped_tool(monkeypatch):
     main.clear_session(7)
     monkeypatch.setitem(main.TOOL_HANDLERS, "some_new_tool", lambda **kw: [])

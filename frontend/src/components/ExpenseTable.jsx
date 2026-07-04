@@ -1,80 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import {
-  Car, Home, Package, Plane, UtensilsCrossed, Coffee, ShoppingCart, Sofa,
-  Film, SprayCan, HeartPulse, Shirt, Phone, Bus, Fuel, Sparkles, Zap, Repeat, X, ArrowUp,
-  Flag, Trash2, Wallet, Search, ChevronDown,
-} from "lucide-react";
+import { X, ArrowUp, Flag, Trash2, Wallet, Search, ChevronDown } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerTrigger } from "@/components/ui/drawer";
-import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { useMediaQuery } from "@/hooks/use-media-query";
-
-const CATEGORY_ICONS = {
-  "Driving": Car,
-  "Rent": Home,
-  "Settling Down": Package,
-  "Travel": Plane,
-  "Dining": UtensilsCrossed,
-  "Drinks": Coffee,
-  "Groceries": ShoppingCart,
-  "Furniture": Sofa,
-  "Entertainment": Film,
-  "Household": SprayCan,
-  "Health": HeartPulse,
-  "Clothing": Shirt,
-  "Telecom": Phone,
-  "Transport": Bus,
-  "Gas": Fuel,
-  "Beauty": Sparkles,
-  "Hydro": Zap,
-  "Subscription": Repeat,
-};
-
-const CATEGORY_COLORS = {
-  "Dining":        "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400",
-  "Drinks":        "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-400",
-  "Groceries":     "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400",
-  "Transport":     "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400",
-  "Driving":       "bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-400",
-  "Gas":           "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-400",
-  "Travel":        "bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-400",
-  "Clothing":      "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-400",
-  "Beauty":        "bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-400",
-  "Entertainment": "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-400",
-  "Subscription":  "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400",
-  "Health":        "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400",
-  "Household":     "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-400",
-  "Furniture":     "bg-lime-100 text-lime-700 dark:bg-lime-900/40 dark:text-lime-400",
-  "Rent":          "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
-  "Hydro":         "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400",
-  "Telecom":       "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400",
-  "Settling Down": "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-400",
-};
-
-const CATEGORY_BAR_COLORS = {
-  "Dining":        "bg-green-500",
-  "Drinks":        "bg-purple-500",
-  "Groceries":     "bg-emerald-500",
-  "Transport":     "bg-blue-500",
-  "Driving":       "bg-sky-500",
-  "Gas":           "bg-cyan-500",
-  "Travel":        "bg-teal-500",
-  "Clothing":      "bg-violet-500",
-  "Beauty":        "bg-pink-500",
-  "Entertainment": "bg-orange-500",
-  "Subscription":  "bg-amber-500",
-  "Health":        "bg-red-500",
-  "Household":     "bg-yellow-500",
-  "Furniture":     "bg-lime-500",
-  "Rent":          "bg-zinc-500",
-  "Hydro":         "bg-slate-500",
-  "Telecom":       "bg-gray-500",
-  "Settling Down": "bg-indigo-500",
-};
+import { CategoryBadge, BreakdownRow } from "@/components/CategoryVisuals";
+import { useAnimatedNumber } from "@/lib/categoryVisuals";
 
 const formatDate = (d) =>
   new Date(d + "T00:00:00").toLocaleDateString("default", { month: "short", day: "numeric" });
@@ -92,57 +26,6 @@ const formatMonth = (ym) => {
   return new Date(year, month - 1).toLocaleString("default", { month: "long", year: "numeric" });
 };
 
-const USER_DOT_COLORS = ["bg-blue-500", "bg-pink-500", "bg-emerald-500", "bg-amber-500", "bg-violet-500"];
-
-const userColor = (username) => {
-  let hash = 0;
-  for (let i = 0; i < username.length; i++) hash = (hash * 31 + username.charCodeAt(i)) >>> 0;
-  return USER_DOT_COLORS[hash % USER_DOT_COLORS.length];
-};
-
-const UserDot = ({ loggedBy, onUserClick, userActive, className = "" }) => (
-  <button
-    type="button"
-    title={loggedBy}
-    onClick={(ev) => { ev.stopPropagation(); onUserClick?.(loggedBy); }}
-    className={`w-3.5 h-3.5 rounded-full ring-2 ring-background flex items-center justify-center text-[8px] font-bold text-white leading-none ${userColor(loggedBy)} ${userActive ? "ring-foreground" : ""} ${className}`}
-  >
-    {loggedBy[0].toUpperCase()}
-  </button>
-);
-
-const CategoryBadge = ({ category, small = false, loggedBy, onUserClick, userActive }) => {
-  const Icon = CATEGORY_ICONS[category];
-  if (small) {
-    return (
-      <span className="relative inline-flex shrink-0">
-        <span
-          title={category}
-          className={`inline-flex items-center rounded font-medium p-1.5 ${CATEGORY_COLORS[category] ?? "bg-muted text-muted-foreground"}`}
-        >
-          {Icon && <Icon className="size-3.5" />}
-          <span className="sr-only">{category}</span>
-        </span>
-        {loggedBy && (
-          <UserDot loggedBy={loggedBy} onUserClick={onUserClick} userActive={userActive} className="absolute -bottom-1 -right-1" />
-        )}
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center gap-1.5 shrink-0">
-      <span
-        title={category}
-        className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-md font-medium ${CATEGORY_COLORS[category] ?? "bg-muted text-muted-foreground"}`}
-      >
-        {Icon && <Icon className="size-3" />}
-        {category}
-      </span>
-      {loggedBy && <UserDot loggedBy={loggedBy} onUserClick={onUserClick} userActive={userActive} />}
-    </span>
-  );
-};
-
 const ExpenseSkeleton = () => (
   <div className="px-4 py-3 space-y-3">
     {[0, 1, 2, 3, 4].map((i) => (
@@ -150,38 +33,6 @@ const ExpenseSkeleton = () => (
     ))}
   </div>
 );
-
-const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
-
-function useAnimatedNumber(value, duration = 350) {
-  const [display, setDisplay] = useState(value);
-  const fromRef = useRef(value);
-  const rafRef = useRef(null);
-
-  useEffect(() => {
-    const from = fromRef.current;
-    if (from === value) return;
-    const start = performance.now();
-
-    const tick = (now) => {
-      const t = Math.min(1, (now - start) / duration);
-      const current = from + (value - from) * easeOutCubic(t);
-      fromRef.current = current;
-      setDisplay(current);
-      if (t < 1) {
-        rafRef.current = requestAnimationFrame(tick);
-      } else {
-        fromRef.current = value;
-        setDisplay(value);
-      }
-    };
-    rafRef.current = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(rafRef.current);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value]);
-
-  return display;
-}
 
 const SWIPE_MAX = 88;
 const SWIPE_THRESHOLD = 64;
@@ -260,70 +111,6 @@ const SwipeableRow = ({ onSwipeLeft, onSwipeRight, children }) => {
         {children}
       </div>
     </div>
-  );
-};
-
-const BreakdownRow = ({ category, amount, count, pct, barPct, limit, maxCategoryTotal, active, onClick }) => {
-  const animatedAmount = useAnimatedNumber(amount);
-  const animatedPct = useAnimatedNumber(pct);
-
-  const hasBudget = limit != null && maxCategoryTotal > 0;
-  const linePct = hasBudget ? (limit / maxCategoryTotal) * 100 : null;
-  const showLine = hasBudget && linePct <= 100;
-  const usedPct = hasBudget && limit > 0 ? (amount / limit) * 100 : 0;
-  const overBudget = hasBudget && amount > limit;
-
-  const statusLevel = !hasBudget ? "none" : usedPct > 100 ? "over" : usedPct >= 80 ? "near" : "ok";
-  const lineColor = statusLevel === "over" ? "bg-red-500" : statusLevel === "near" ? "bg-amber-500" : "bg-foreground/50";
-  const amountColor = statusLevel === "over"
-    ? "text-red-600 dark:text-red-400"
-    : statusLevel === "near"
-    ? "text-amber-600 dark:text-amber-400"
-    : "text-foreground";
-
-  const baseFillPct = overBudget ? linePct : barPct;
-  const overFillPct = overBudget ? barPct - linePct : 0;
-
-  const tooltipText = hasBudget
-    ? `$${amount.toFixed(2)} of $${limit.toFixed(2)} budget (${usedPct.toFixed(0)}%) — ${count} transaction${count === 1 ? "" : "s"}`
-    : `$${amount.toFixed(2)} across ${count} transaction${count === 1 ? "" : "s"}`;
-
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button
-          type="button"
-          onClick={onClick}
-          className={`flex items-center gap-2 w-full text-left rounded-md -mx-1 px-1 py-0.5 transition-colors ${
-            active ? "bg-muted" : "hover:bg-muted/50"
-          }`}
-        >
-          <CategoryBadge category={category} small />
-          <span className="text-xs text-foreground w-24 md:w-32 truncate">{category}</span>
-          <div className="relative flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
-            <div
-              className={`absolute inset-y-0 left-0 rounded-full transition-[width] duration-300 ease-out ${CATEGORY_BAR_COLORS[category] ?? "bg-foreground/40"}`}
-              style={{ width: `${baseFillPct}%` }}
-            />
-            {overBudget && (
-              <div
-                className="absolute inset-y-0 rounded-r-full bg-red-500 transition-[width,left] duration-300 ease-out"
-                style={{ left: `${linePct}%`, width: `${overFillPct}%` }}
-              />
-            )}
-            {showLine && (
-              <div
-                className={`absolute inset-y-0 w-px transition-[left,background-color] duration-300 ease-out ${lineColor}`}
-                style={{ left: `${linePct}%` }}
-              />
-            )}
-          </div>
-          <span className="text-xs tabular-nums text-muted-foreground w-9 text-right">{animatedPct.toFixed(0)}%</span>
-          <span className={`text-xs font-medium tabular-nums w-14 text-right transition-colors ${amountColor}`}>${animatedAmount.toFixed(0)}</span>
-        </button>
-      </TooltipTrigger>
-      <TooltipContent side="top">{tooltipText}</TooltipContent>
-    </Tooltip>
   );
 };
 

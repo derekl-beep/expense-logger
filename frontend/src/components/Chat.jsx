@@ -10,6 +10,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { BreakdownRow } from "@/components/CategoryVisuals";
 
 const TTL_MS = 24 * 60 * 60 * 1000;
 // Backstop for a silently hung connection (no error, no more data, [DONE]
@@ -39,6 +40,33 @@ function saveMessages(msgs, username) {
     // localStorage unavailable (e.g. private browsing) — drop silently
   }
 }
+
+// Renders a get_category_breakdown tool result with the same BreakdownRow
+// used in the expense list, instead of the agent's markdown table — reuses
+// the app's own visual language for structured data rather than prose.
+const BreakdownCard = ({ breakdown, grand_total }) => {
+  if (!breakdown?.length) return null;
+  const maxCategoryTotal = Math.max(0, ...breakdown.map((r) => r.total));
+  return (
+    <div className="space-y-1.5 mb-2 rounded-xl border border-border bg-background/60 p-2.5">
+      {breakdown.map((r) => (
+        <BreakdownRow
+          key={r.category}
+          category={r.category}
+          amount={r.total}
+          count={r.count}
+          pct={r.pct}
+          barPct={maxCategoryTotal ? (r.total / maxCategoryTotal) * 100 : 0}
+          maxCategoryTotal={maxCategoryTotal}
+        />
+      ))}
+      <div className="flex items-center justify-between pt-1 mt-1 border-t border-border/50 text-xs">
+        <span className="text-muted-foreground">Total</span>
+        <span className="font-semibold text-foreground tabular-nums">${grand_total.toFixed(2)}</span>
+      </div>
+    </div>
+  );
+};
 
 export default function Chat({ onExpenseChange, className = "", token, username, onLogout, dark, onToggleDark }) {
   const [messages, setMessages] = useState(() => loadMessages(username));
@@ -197,6 +225,13 @@ export default function Chat({ onExpenseChange, className = "", token, username,
               failMessage(data.error);
             } else if (data.status) {
               setAgentStatus(data.status);
+            } else if (data.breakdown) {
+              setMessages((prev) => {
+                const updated = [...prev];
+                const last = updated[updated.length - 1];
+                updated[updated.length - 1] = { ...last, breakdown: data.breakdown };
+                return updated;
+              });
             } else if (data.text) {
               setMessages((prev) => {
                 const updated = [...prev];
@@ -338,7 +373,7 @@ export default function Chat({ onExpenseChange, className = "", token, username,
                 <Bot className="w-4 h-4" />
               </div>
             )}
-            <div className={`max-w-[85%] px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed ${
+            <div className={`${m.breakdown ? "max-w-[95%]" : "max-w-[85%]"} px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed ${
               m.role === "user"
                 ? "bg-primary text-primary-foreground rounded-br-sm"
                 : m.error
@@ -352,6 +387,7 @@ export default function Chat({ onExpenseChange, className = "", token, username,
                   ))}
                 </div>
               )}
+              {m.breakdown && <BreakdownCard breakdown={m.breakdown.breakdown} grand_total={m.breakdown.grand_total} />}
               {m.role === "agent"
                 ? <div className="prose prose-sm dark:prose-invert max-w-none [&_table]:text-xs [&_th]:py-1 [&_td]:py-1 [&_p]:my-0.5">
                     <Markdown remarkPlugins={[remarkGfm]}>{m.text}</Markdown>

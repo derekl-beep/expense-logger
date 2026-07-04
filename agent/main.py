@@ -127,7 +127,7 @@ def _build_user_content(user_input: str, images: list[dict] | None) -> str:
     return "\n\n".join(parts)
 
 
-def _run_tools(response_content: list, user_id: int) -> list:
+def _run_tools(response_content: list, user_id: int, on_result=None) -> list:
     tool_results = []
     for block in response_content:
         if block.type == "tool_use":
@@ -136,6 +136,8 @@ def _run_tools(response_content: list, user_id: int) -> list:
                 kwargs["user_id"] = user_id
             result = TOOL_HANDLERS[block.name](**kwargs)
             print(f"[tool] {block.name}({kwargs}) -> {result}")
+            if on_result:
+                on_result(block.name, result)
             tool_results.append({
                 "type": "tool_result",
                 "tool_use_id": block.id,
@@ -219,8 +221,16 @@ def stream_chat(user_input: str, user_id: int, username: str = "user", images: l
             for block in final.content:
                 if block.type == "tool_use":
                     yield {"status": TOOL_STATUS_LABELS.get(block.name, "Working…")}
-            tool_results = _run_tools(final.content, user_id)
+
+            rich_events = []
+
+            def _capture_rich_result(name, result):
+                if name == "get_category_breakdown":
+                    rich_events.append({"breakdown": result})
+
+            tool_results = _run_tools(final.content, user_id, on_result=_capture_rich_result)
             messages.append({"role": "user", "content": tool_results})
+            yield from rich_events
 
 
 if __name__ == "__main__":

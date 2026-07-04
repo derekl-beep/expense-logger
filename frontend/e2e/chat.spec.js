@@ -59,6 +59,34 @@ test("an error mid-stream keeps the partial answer instead of wiping it", async 
   await expect(page.getByText("Something went wrong. Please try again.")).toBeVisible();
 });
 
+test("a category breakdown tool result renders as a rich card, not a markdown table", async ({ page }) => {
+  await page.route("**/chat/stream", async (route) => {
+    const breakdown = {
+      breakdown: [
+        { category: "Dining", total: 120.5, count: 4, pct: 60.3 },
+        { category: "Groceries", total: 79.25, count: 2, pct: 39.7 },
+      ],
+      grand_total: 199.75,
+    };
+    const body = [
+      `data: ${JSON.stringify({ breakdown })}`,
+      `data: ${JSON.stringify({ text: "Here's your breakdown." })}`,
+      "data: [DONE]",
+      "",
+    ].join("\n\n");
+    await route.fulfill({ status: 200, contentType: "text/event-stream", body });
+  });
+
+  await page.getByPlaceholder("e.g. $5 coffee today").fill("summarize this month");
+  await page.getByRole("button", { name: "Send message" }).click();
+
+  await expect(page.getByText("Here's your breakdown.")).toBeVisible();
+  await expect(page.getByText("Dining", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("Groceries", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("$121", { exact: false }).first()).toBeVisible();
+  await expect(page.getByText("$199.75", { exact: true })).toBeVisible();
+});
+
 test("attaching an image shows a preview thumbnail that can be removed", async ({ page }) => {
   await page.locator('input[type="file"]').setInputFiles({
     name: "receipt.png",
