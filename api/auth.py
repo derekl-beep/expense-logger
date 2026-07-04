@@ -21,10 +21,11 @@ def verify_password(plain: str, hashed: str) -> bool:
     return bcrypt.checkpw(plain.encode(), hashed.encode())
 
 
-def create_token(user_id: int, remember: bool = False) -> str:
+def create_token(user_id: int, username: str, remember: bool = False) -> str:
     days = TOKEN_EXPIRE_DAYS_REMEMBER if remember else TOKEN_EXPIRE_DAYS_DEFAULT
     payload = {
         "sub": str(user_id),
+        "username": username,
         "exp": datetime.now(timezone.utc) + timedelta(days=days),
     }
     return jwt.encode(payload, os.environ["JWT_SECRET"], algorithm=ALGORITHM)
@@ -36,5 +37,15 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(bearer)
             credentials.credentials, os.environ["JWT_SECRET"], algorithms=[ALGORITHM]
         )
         return int(payload["sub"])
+    except (JWTError, KeyError, ValueError):
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+
+def get_current_username(credentials: HTTPAuthorizationCredentials = Depends(bearer)) -> str:
+    try:
+        payload = jwt.decode(
+            credentials.credentials, os.environ["JWT_SECRET"], algorithms=[ALGORITHM]
+        )
+        return payload["username"]
     except (JWTError, KeyError, ValueError):
         raise HTTPException(status_code=401, detail="Invalid or expired token")

@@ -11,7 +11,7 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from agent.categories import CATEGORIES
 from agent.db import (
@@ -21,15 +21,14 @@ from agent.db import (
     get_budgets,
     get_expenses,
     get_recurring_expenses,
-    get_user_by_id,
     get_user_by_username,
     increment_api_call_count,
     set_budget,
     update_expense,
 )
-from agent.main import chat, clear_session, stream_chat
+from agent.main import clear_session, stream_chat
 from agent.tools import SUGGESTED_PROMPTS
-from api.auth import create_token, get_current_user, verify_password
+from api.auth import create_token, get_current_user, get_current_username, verify_password
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +70,7 @@ def login(req: LoginRequest):
     user = get_user_by_username(req.username)
     if not user or not verify_password(req.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    return {"token": create_token(user["id"], req.remember), "username": user["username"]}
+    return {"token": create_token(user["id"], user["username"], req.remember), "username": user["username"]}
 
 
 class ImageInput(BaseModel):
@@ -84,25 +83,16 @@ class ChatRequest(BaseModel):
     images: list[ImageInput] | None = None
 
 
-def _get_username(user_id: int) -> str:
-    user = get_user_by_id(user_id)
-    return user["username"] if user else "user"
-
-
 def _images_payload(req: ChatRequest) -> list[dict] | None:
     return [img.model_dump() for img in req.images] if req.images else None
 
 
-@app.post("/chat")
-def chat_endpoint(req: ChatRequest, user_id: int = Depends(check_rate_limit)):
-    response = chat(req.message, user_id, _get_username(user_id), _images_payload(req))
-    return {"response": response}
-
-
 @app.post("/chat/stream")
-def chat_stream_endpoint(req: ChatRequest, user_id: int = Depends(check_rate_limit)):
-    username = _get_username(user_id)
-
+def chat_stream_endpoint(
+    req: ChatRequest,
+    user_id: int = Depends(check_rate_limit),
+    username: str = Depends(get_current_username),
+):
     def generate():
         try:
             for chunk in stream_chat(req.message, user_id, username, _images_payload(req)):
@@ -142,7 +132,7 @@ def recurring_expenses_endpoint(user_id: int = Depends(get_current_user)):
 
 
 class BudgetRequest(BaseModel):
-    monthly_limit: float
+    monthly_limit: float = Field(gt=0)
 
 
 @app.get("/budgets")
@@ -166,11 +156,11 @@ def chat_suggestions_endpoint():
 
 
 class UpdateRequest(BaseModel):
-    amount: float = None
-    category: str = None
-    description: str = None
-    date: str = None
-    flagged: bool = None
+    amount: float | None = None
+    category: str | None = None
+    description: str | None = None
+    date: str | None = None
+    flagged: bool | None = None
 
     @field_validator("category")
     @classmethod
@@ -182,12 +172,18 @@ class UpdateRequest(BaseModel):
 
 @app.patch("/expenses/{id}")
 def update_expense_endpoint(id: int, req: UpdateRequest, user_id: int = Depends(get_current_user)):
-    return update_expense(id, req.amount, req.category, req.description, req.date, req.flagged)
+    result = update_expense(id, req.amount, req.category, req.description, req.date, req.flagged)
+    if result.get("status") == "not_found":
+        raise HTTPException(status_code=404, detail="Expense not found")
+    return result
 
 
 @app.delete("/expenses/{id}")
 def delete_expense_endpoint(id: int, user_id: int = Depends(get_current_user)):
-    return delete_expense(id)
+    result = delete_expense(id)
+    if result.get("status") == "not_found":
+        raise HTTPException(status_code=404, detail="Expense not found")
+    return result
 
 
 

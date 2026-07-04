@@ -60,7 +60,9 @@ To delete, first call get_expenses to find the ID, then call delete_expense.
 
 # Conversation history keyed by user_id.
 _sessions: dict[str, list] = {}
-HISTORY_LIMIT = 30  # max raw messages passed to the API per turn
+HISTORY_LIMIT = 30   # max messages passed to the API per turn
+_SESSION_CAP = 120   # trim stored history once it exceeds this to prevent unbounded growth
+API_TIMEOUT = 120.0  # seconds before giving up on a Claude API call
 MODEL_DEFAULT = "claude-haiku-4-5-20251001"
 MODEL_VISION = "claude-sonnet-4-6"  # better accuracy for reading text in images
 
@@ -68,10 +70,17 @@ MODEL_VISION = "claude-sonnet-4-6"  # better accuracy for reading text in images
 MAX_IMAGES = 6
 
 
+def _trim_session(messages: list) -> None:
+    """Drop oldest messages when history grows beyond _SESSION_CAP to bound memory use."""
+    if len(messages) > _SESSION_CAP:
+        messages[:] = messages[-HISTORY_LIMIT:]
+
+
 def _ocr_image(image_data: str, image_media_type: str) -> str:
     response = client.messages.create(
         model=MODEL_VISION,
         max_tokens=1024,
+        timeout=API_TIMEOUT,
         messages=[{
             "role": "user",
             "content": [
@@ -121,11 +130,13 @@ def chat(user_input: str, user_id: int, username: str = "user", images: list[dic
     messages = _sessions.setdefault(str(user_id), [])
     content = _build_user_content(user_input, images)
     messages.append({"role": "user", "content": content})
+    _trim_session(messages)
 
     while True:
         response = client.messages.create(
             model=MODEL_DEFAULT,
             max_tokens=2048,
+            timeout=API_TIMEOUT,
             system=SYSTEM.format(today=date.today().isoformat(), username=username, category_hints=CATEGORY_HINTS),
             tools=TOOL_DEFINITIONS,
             messages=messages[-HISTORY_LIMIT:],
@@ -147,12 +158,14 @@ def stream_chat(user_input: str, user_id: int, username: str = "user", images: l
     messages = _sessions.setdefault(str(user_id), [])
     content = _build_user_content(user_input, images)
     messages.append({"role": "user", "content": content})
+    _trim_session(messages)
 
     last_char = ""
     while True:
         with client.messages.stream(
             model=MODEL_DEFAULT,
             max_tokens=2048,
+            timeout=API_TIMEOUT,
             system=SYSTEM.format(today=date.today().isoformat(), username=username, category_hints=CATEGORY_HINTS),
             tools=TOOL_DEFINITIONS,
             messages=messages[-HISTORY_LIMIT:],
