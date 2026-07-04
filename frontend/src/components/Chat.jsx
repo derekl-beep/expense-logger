@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { ArrowDown, ArrowUp, Bot, Command, ImagePlus, MessageCircle, MessageSquarePlus, MoreHorizontal, User } from "lucide-react";
+import { toast } from "sonner";
+import { ArrowDown, ArrowUp, Bot, Command, ImagePlus, Mic, MessageCircle, MessageSquarePlus, MoreHorizontal, Square, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -19,6 +20,11 @@ const TTL_MS = 24 * 60 * 60 * 1000;
 const FETCH_TIMEOUT_MS = 150 * 1000;
 
 const INITIAL_MESSAGE = { role: "agent", text: "Hi! Log an expense or ask about your spending.", ts: Date.now() };
+
+// Firefox and some older browsers don't implement this at all — the mic
+// button is simply omitted there rather than shown as a dead control.
+const SpeechRecognitionAPI =
+  typeof window !== "undefined" ? window.SpeechRecognition || window.webkitSpeechRecognition : null;
 
 const storageKey = (username) => `chat_messages_${username}`;
 
@@ -84,6 +90,72 @@ export default function Chat({ onExpenseChange, className = "", token, username,
   const [suggestions, setSuggestions] = useState([]);
   const [commands, setCommands] = useState([]);
   const [rawSelectedCommandIndex, setSelectedCommandIndex] = useState(0);
+  const [isListening, setIsListening] = useState(false);
+  const recognitionRef = useRef(null);
+  // Text to prepend the transcript onto, and the transcript we last wrote —
+  // used to detect a manual edit (typing, a suggestion chip, the "/" empty-state
+  // button, anything) made mid-recording so it rebases instead of getting
+  // silently clobbered by the next interim result.
+  const voiceBaseTextRef = useRef("");
+  const voiceLastTranscriptRef = useRef("");
+
+  const stopListening = () => {
+    try {
+      recognitionRef.current?.stop();
+    } catch {
+      // Already stopped or never started — nothing to do.
+    }
+  };
+
+  // Stop any in-progress recognition if the component unmounts mid-recording.
+  useEffect(() => {
+    return () => stopListening();
+  }, []);
+
+  const toggleListening = () => {
+    if (!SpeechRecognitionAPI) return;
+    if (isListening) {
+      stopListening();
+      return;
+    }
+    voiceBaseTextRef.current = input;
+    voiceLastTranscriptRef.current = "";
+    const recognition = new SpeechRecognitionAPI();
+    recognition.lang = "en-US";
+    recognition.interimResults = true;
+    recognition.continuous = false;
+    recognition.onresult = (e) => {
+      const transcript = Array.from(e.results).map((r) => r[0].transcript).join("");
+      setInput((current) => {
+        const base = voiceBaseTextRef.current;
+        const sep = base && !base.endsWith(" ") ? " " : "";
+        const expected = base + sep + voiceLastTranscriptRef.current;
+        if (current !== expected) {
+          // Something else changed the input since our last write — rebase
+          // onto it instead of overwriting whatever the user just did.
+          voiceBaseTextRef.current = current;
+          voiceLastTranscriptRef.current = "";
+        }
+        const newBase = voiceBaseTextRef.current;
+        const newSep = newBase && !newBase.endsWith(" ") ? " " : "";
+        voiceLastTranscriptRef.current = transcript;
+        return newBase + newSep + transcript;
+      });
+    };
+    recognition.onerror = (e) => {
+      if (e.error !== "no-speech" && e.error !== "aborted") {
+        toast.error("Couldn't access the microphone");
+      }
+    };
+    recognition.onend = () => setIsListening(false);
+    recognitionRef.current = recognition;
+    try {
+      recognition.start();
+      setIsListening(true);
+    } catch {
+      toast.error("Couldn't access the microphone");
+    }
+  };
 
   // Show "Still working…" if a turn runs long, so a slow tool call doesn't read as hung.
   useEffect(() => {
@@ -165,6 +237,7 @@ export default function Chat({ onExpenseChange, className = "", token, username,
 
   const sendMessage = async (text, displayText = null) => {
     if (!text || loading) return;
+    stopListening();
     const attachedImages = images;
     setImages([]);
     setMessages((prev) => [
@@ -552,6 +625,22 @@ export default function Chat({ onExpenseChange, className = "", token, username,
             className="shrink-0 w-9 h-9 flex items-center justify-center rounded-2xl border border-input text-muted-foreground hover:bg-muted hover:text-foreground transition-colors disabled:opacity-50"
             title="Attach image"
           ><ImagePlus className="w-4 h-4" /></button>
+          {SpeechRecognitionAPI && (
+            <button
+              type="button"
+              onClick={toggleListening}
+              disabled={loading}
+              aria-label={isListening ? "Stop voice input" : "Start voice input"}
+              title={isListening ? "Stop voice input" : "Voice input"}
+              className={`shrink-0 w-9 h-9 flex items-center justify-center rounded-2xl border transition-colors disabled:opacity-50 ${
+                isListening
+                  ? "border-destructive bg-destructive/10 text-destructive animate-pulse"
+                  : "border-input text-muted-foreground hover:bg-muted hover:text-foreground"
+              }`}
+            >
+              {isListening ? <Square className="w-3.5 h-3.5" fill="currentColor" /> : <Mic className="w-4 h-4" />}
+            </button>
+          )}
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
