@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { ArrowDown, ArrowUp, Bot, ImagePlus, MessageSquarePlus, MoreHorizontal, User } from "lucide-react";
+import { ArrowDown, ArrowUp, Bot, Command, ImagePlus, MessageCircle, MessageSquarePlus, MoreHorizontal, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -443,6 +443,39 @@ export default function Chat({ onExpenseChange, className = "", token, username,
             )}
           </div>
         ))}
+        {displayMessages.length === 1 && (
+          <div className="rounded-xl border border-border p-1.5 space-y-0.5">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="w-full flex items-start gap-2.5 text-left rounded-lg p-2 hover:bg-muted transition-colors"
+            >
+              <ImagePlus className="w-4 h-4 mt-0.5 shrink-0 text-muted-foreground" />
+              <span>
+                <span className="block text-sm font-medium text-foreground">Snap a receipt</span>
+                <span className="block text-xs text-muted-foreground">I'll read the line items and log them</span>
+              </span>
+            </button>
+            <div className="w-full flex items-start gap-2.5 text-left rounded-lg p-2">
+              <MessageCircle className="w-4 h-4 mt-0.5 shrink-0 text-muted-foreground" />
+              <span>
+                <span className="block text-sm font-medium text-foreground">Just type it naturally</span>
+                <span className="block text-xs text-muted-foreground">"$12 lunch at Chipotle" is all it takes</span>
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setInput("/")}
+              className="w-full flex items-start gap-2.5 text-left rounded-lg p-2 hover:bg-muted transition-colors"
+            >
+              <Command className="w-4 h-4 mt-0.5 shrink-0 text-muted-foreground" />
+              <span>
+                <span className="block text-sm font-medium text-foreground">Ask about your spending</span>
+                <span className="block text-xs text-muted-foreground">Type / to see every report I can run</span>
+              </span>
+            </button>
+          </div>
+        )}
         {displayMessages.length === 1 && suggestions.length > 0 && (
           <div className="flex flex-wrap gap-1.5 pl-1">
             {suggestions.map((s) => (

@@ -26,6 +26,21 @@ test("clicking a suggestion chip sends its prompt as a user message", async ({ p
   await expect(page.getByText("Something went wrong. Please try again.")).toBeVisible();
 });
 
+test("the first-run capability cards are shown, and clicking them acts without sending a message", async ({ page }) => {
+  await expect(page.getByRole("button", { name: /Snap a receipt/ })).toBeVisible();
+  await expect(page.getByText("Just type it naturally")).toBeVisible();
+
+  const [fileChooser] = await Promise.all([
+    page.waitForEvent("filechooser"),
+    page.getByRole("button", { name: /Snap a receipt/ }).click(),
+  ]);
+  expect(fileChooser).toBeTruthy();
+
+  await page.getByRole("button", { name: /Ask about your spending/ }).click();
+  await expect(page.getByPlaceholder("e.g. $5 coffee today")).toHaveValue("/");
+  await expect(page.getByRole("button", { name: "Summarize this month /summary" })).toBeVisible();
+});
+
 test("clicking New chat resets the conversation to the initial welcome message", async ({ page }) => {
   await page.getByPlaceholder("e.g. $5 coffee today").fill("hello there");
   await page.getByRole("button", { name: "Send message" }).click();
