@@ -242,7 +242,7 @@ const BudgetDialog = ({ categories, budgetMap, spendByCategory, authFetch, onSav
     <button
       type="button"
       title="Manage budgets"
-      className="w-7 h-7 flex items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+      className="w-7 h-7 flex items-center justify-center rounded-md border border-transparent text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 transition-colors"
     >
       <Wallet className="w-3.5 h-3.5" />
     </button>
@@ -262,7 +262,18 @@ const BudgetDialog = ({ categories, budgetMap, spendByCategory, authFetch, onSav
     return (
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogTrigger asChild>{trigger}</DialogTrigger>
-        <DialogContent className="sm:max-w-sm" onOpenAutoFocus={(e) => e.preventDefault()}>
+        <DialogContent
+          className="sm:max-w-sm"
+          onOpenAutoFocus={(e) => {
+            // Don't let Radix autofocus the first budget input — that pops
+            // the mobile keyboard immediately on open. Focus the dialog
+            // container itself instead (it's a valid, non-input focus
+            // target per the ARIA dialog pattern) so keyboard/screen-reader
+            // users still land inside the dialog rather than nowhere.
+            e.preventDefault();
+            e.currentTarget.focus();
+          }}
+        >
           <DialogHeader>
             <DialogTitle className="text-sm font-semibold">Manage Budgets</DialogTitle>
             <DialogDescription className="sr-only">Set monthly spending limits per category</DialogDescription>
@@ -486,7 +497,17 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
 
       {/* Edit modal — shared between mobile and desktop */}
       <Dialog open={!!editingExpense} onOpenChange={(open) => { if (!open) setEditingExpense(null); }}>
-        <DialogContent className="sm:max-w-sm" onOpenAutoFocus={(e) => e.preventDefault()}>
+        <DialogContent
+          className="sm:max-w-sm"
+          onOpenAutoFocus={(e) => {
+            // Same rationale as BudgetDialog: skip autofocusing the
+            // Description input (avoids an immediate mobile keyboard pop),
+            // but still move focus into the dialog itself rather than
+            // leaving it stranded on the now-inert trigger behind the modal.
+            e.preventDefault();
+            e.currentTarget.focus();
+          }}
+        >
           <DialogHeader>
             <DialogTitle className="text-sm font-semibold">Edit Expense</DialogTitle>
             <DialogDescription className="sr-only">Edit the details of this expense</DialogDescription>
@@ -515,7 +536,7 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
                         const amt = parseFloat(v.amount);
                         return Number.isFinite(amt) ? { ...v, amount: Math.round((amt / n) * 100) / 100 } : v;
                       })}
-                      className="text-xs px-1.5 py-0.5 rounded border border-border text-muted-foreground hover:bg-muted transition-colors"
+                      className="text-xs px-1.5 py-0.5 rounded border border-border text-muted-foreground outline-none hover:bg-muted focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 transition-colors"
                     >
                       {["½", "⅓", "¼"][n - 2]}
                     </button>
@@ -538,11 +559,12 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
               </Select>
             </div>
             <button
+              type="button"
               onClick={() => setEditValues({ ...editValues, flagged: !editValues.flagged })}
-              className={`flex items-center gap-2 text-xs px-3 py-2 rounded-md border w-full transition-colors ${
+              className={`flex items-center gap-2 text-xs px-3 py-2 rounded-md border w-full outline-none focus-visible:ring-3 focus-visible:ring-ring/50 transition-colors ${
                 editValues.flagged
-                  ? "border-amber-400 bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-700"
-                  : "border-border text-muted-foreground hover:bg-muted"
+                  ? "border-amber-400 bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-700 focus-visible:border-amber-500"
+                  : "border-border text-muted-foreground hover:bg-muted focus-visible:border-ring"
               }`}
             >
               <span>⚑</span>
