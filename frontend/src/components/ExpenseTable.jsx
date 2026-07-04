@@ -129,7 +129,7 @@ const sortCategoriesByBudget = (categories, budgetMap) => {
   return [...budgeted, ...unbudgeted];
 };
 
-const BudgetSettings = ({ categories, budgetMap, authFetch, onSaved }) => {
+const BudgetSettings = ({ categories, budgetMap, spendByCategory, authFetch, onSaved }) => {
   const [values, setValues] = useState(() => valuesFromBudgetMap(categories, budgetMap));
   const [syncedBudgetMap, setSyncedBudgetMap] = useState(budgetMap);
   const [orderedCategories, setOrderedCategories] = useState(() => sortCategoriesByBudget(categories, budgetMap));
@@ -180,32 +180,61 @@ const BudgetSettings = ({ categories, budgetMap, authFetch, onSaved }) => {
   };
 
   return (
-    <div className="space-y-1 max-h-[60vh] overflow-y-auto -mx-1 px-1">
-      {orderedCategories.map((category) => (
-        <div key={category} className="flex items-center gap-2 py-1">
-          <CategoryBadge category={category} small />
-          <span className="text-sm text-foreground flex-1 truncate">{category}</span>
-          <div className="relative w-24 shrink-0">
-            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">$</span>
-            <Input
-              type="number"
-              inputMode="decimal"
-              step="1"
-              min="0"
-              placeholder="—"
-              value={values[category] ?? ""}
-              onChange={(e) => setValues((v) => ({ ...v, [category]: e.target.value }))}
-              onBlur={() => handleBlur(category)}
-              className="h-8 text-sm pl-5 text-right"
-            />
+    <div className="space-y-2 max-h-[60vh] overflow-y-auto -mx-1 px-1">
+      {orderedCategories.map((category) => {
+        const limit = budgetMap[category];
+        const spent = spendByCategory?.[category] ?? 0;
+        // spendByCategory is omitted entirely when the table is filtered to
+        // "All time" — its totals would be lifetime, not monthly, spend, so
+        // suppress the indicator rather than show a misleading comparison.
+        const hasBudget = limit != null && spendByCategory != null;
+        const usedPct = hasBudget && limit > 0 ? (spent / limit) * 100 : 0;
+        const statusLevel = !hasBudget ? "none" : usedPct > 100 ? "over" : usedPct >= 80 ? "near" : "ok";
+        const barColor = statusLevel === "over" ? "bg-red-500" : statusLevel === "near" ? "bg-amber-500" : "bg-foreground/40";
+        const textColor = statusLevel === "over"
+          ? "text-red-600 dark:text-red-400"
+          : statusLevel === "near"
+          ? "text-amber-600 dark:text-amber-400"
+          : "text-muted-foreground";
+        return (
+          <div key={category} className="py-1">
+            <div className="flex items-center gap-2">
+              <CategoryBadge category={category} small />
+              <span className="text-sm text-foreground flex-1 truncate">{category}</span>
+              <div className="relative w-24 shrink-0">
+                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">$</span>
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  step="1"
+                  min="0"
+                  placeholder="—"
+                  value={values[category] ?? ""}
+                  onChange={(e) => setValues((v) => ({ ...v, [category]: e.target.value }))}
+                  onBlur={() => handleBlur(category)}
+                  className="h-8 text-sm pl-5 text-right"
+                />
+              </div>
+            </div>
+            {hasBudget && (
+              <div className="flex items-center gap-2 mt-1 pl-8">
+                <div className="relative flex-1 h-1 rounded-full bg-muted overflow-hidden">
+                  <div
+                    className={`absolute inset-y-0 left-0 rounded-full transition-[width] duration-300 ease-out ${barColor}`}
+                    style={{ width: `${Math.min(usedPct, 100)}%` }}
+                  />
+                </div>
+                <span className={`text-xs tabular-nums ${textColor}`}>${spent.toFixed(0)} spent</span>
+              </div>
+            )}
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 };
 
-const BudgetDialog = ({ categories, budgetMap, authFetch, onSaved }) => {
+const BudgetDialog = ({ categories, budgetMap, spendByCategory, authFetch, onSaved }) => {
   const [open, setOpen] = useState(false);
   const isDesktop = useMediaQuery("(min-width: 768px)");
 
@@ -219,7 +248,15 @@ const BudgetDialog = ({ categories, budgetMap, authFetch, onSaved }) => {
     </button>
   );
 
-  const form = <BudgetSettings categories={categories} budgetMap={budgetMap} authFetch={authFetch} onSaved={onSaved} />;
+  const form = (
+    <BudgetSettings
+      categories={categories}
+      budgetMap={budgetMap}
+      spendByCategory={spendByCategory}
+      authFetch={authFetch}
+      onSaved={onSaved}
+    />
+  );
 
   if (isDesktop) {
     return (
@@ -619,7 +656,13 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
           <div className="px-4 py-3 md:px-5 border-b border-border/50">
             <div className="flex items-center justify-between mb-2">
               <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Breakdown</div>
-              <BudgetDialog categories={categories} budgetMap={budgetMap} authFetch={authFetch} onSaved={fetchBudgets} />
+              <BudgetDialog
+                categories={categories}
+                budgetMap={budgetMap}
+                spendByCategory={selectedMonth !== "all" ? categoryTotals : undefined}
+                authFetch={authFetch}
+                onSaved={fetchBudgets}
+              />
             </div>
             <div className="space-y-1.5">
               {(showAllCategories ? breakdown : breakdown.slice(0, 5)).map(({ category, amount, count, pct, barPct, limit }) => (
@@ -662,12 +705,15 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
               <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground transition-transform ${showRecurring ? "rotate-180" : ""}`} />
             </button>
             {showRecurring && (
-              <div className="space-y-1.5 mt-2">
+              <div className="space-y-0.5 mt-2 -mx-1">
                 {recurring.map((r) => (
-                  <div key={`${r.description}-${r.amount}`} className="flex items-center gap-2">
+                  <div
+                    key={`${r.description}-${r.amount}`}
+                    className="flex items-center gap-2 rounded-lg px-1 py-1 hover:bg-muted/50 transition-colors"
+                  >
                     <CategoryBadge category={r.category} small />
                     <span className="text-xs text-foreground flex-1 truncate">{r.description}</span>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded-md font-medium bg-muted text-muted-foreground shrink-0">
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-md font-medium bg-primary/10 text-primary shrink-0">
                       {r.frequency[0].toUpperCase() + r.frequency.slice(1)}
                     </span>
                     <span className="text-xs font-semibold text-foreground tabular-nums shrink-0">${r.amount.toFixed(2)}</span>
