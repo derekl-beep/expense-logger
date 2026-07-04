@@ -1,8 +1,22 @@
-import { useEffect, useRef, useState } from "react";
-import Chat from "./components/Chat";
-import ExpenseTable from "./components/ExpenseTable";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import Login from "./components/Login";
 import { Toaster } from "./components/ui/sonner";
+
+// Split into separate chunks so a change to one pane doesn't bust the
+// other's cache on deploy, and the initial bundle stays smaller. Vite
+// doesn't preload dynamic-import chunks it can't statically prove are
+// needed on first render, so these are warmed manually below while the
+// login screen is still up (see prefetchPanes) rather than only starting
+// the fetch after auth succeeds, which would show a blank Suspense flash.
+const Chat = lazy(() => import("./components/Chat"));
+const ExpenseTable = lazy(() => import("./components/ExpenseTable"));
+const prefetchPanes = () => {
+  // Errors here are surfaced again (and handled) when React.lazy's own
+  // import() runs during render — this is just a best-effort warm-up, so a
+  // failure (offline, flaky network) shouldn't produce an unhandled rejection.
+  import("./components/Chat").catch(() => {});
+  import("./components/ExpenseTable").catch(() => {});
+};
 
 const HIGHLIGHT_MS = 2000;
 
@@ -20,6 +34,14 @@ export default function App() {
   const lastKnownExpensesRef = useRef(null);
   const [activeTab, setActiveTab] = useState(() => localStorage.getItem("activeTab") || "chat");
   const [dark, setDark] = useState(() => localStorage.getItem("theme") === "dark");
+
+  // Warm the Chat/ExpenseTable chunks as soon as the app mounts (including
+  // while the login screen is still showing) so they're already fetched
+  // by the time auth succeeds, instead of only starting the fetch once the
+  // Suspense boundary first tries to render them.
+  useEffect(() => {
+    prefetchPanes();
+  }, []);
 
   useEffect(() => {
     localStorage.setItem("activeTab", activeTab);
@@ -122,26 +144,33 @@ export default function App() {
           <button className={tabClass("expenses")} onClick={() => setActiveTab("expenses")}>Expenses</button>
         </div>
 
-        {/* Panels */}
+        {/* Panels — each in its own Suspense boundary so a slow/failed fetch
+            of one chunk doesn't hold back the other, which is always
+            rendered alongside it (desktop shows both; mobile just toggles
+            visibility via CSS, not mount state). */}
         <div className="flex-1 flex overflow-hidden">
-          <Chat
-            className={activeTab === "chat" ? "flex" : "hidden md:flex"}
-            onExpenseChange={() => { fetchExpenses(); setActiveTab("chat"); }}
-            token={token}
-            username={username}
-            onLogout={handleLogout}
-            dark={dark}
-            onToggleDark={() => setDark((d) => !d)}
-          />
-          <ExpenseTable
-            className={activeTab === "expenses" ? "flex" : "hidden md:flex"}
-            expenses={expenses}
-            token={token}
-            onExpenseChange={fetchExpenses}
-            onUnauthorized={handleLogout}
-            loading={expensesLoading}
-            highlightIds={highlightIds}
-          />
+          <Suspense fallback={<div className="flex-1" />}>
+            <Chat
+              className={activeTab === "chat" ? "flex" : "hidden md:flex"}
+              onExpenseChange={() => { fetchExpenses(); setActiveTab("chat"); }}
+              token={token}
+              username={username}
+              onLogout={handleLogout}
+              dark={dark}
+              onToggleDark={() => setDark((d) => !d)}
+            />
+          </Suspense>
+          <Suspense fallback={<div className="flex-1" />}>
+            <ExpenseTable
+              className={activeTab === "expenses" ? "flex" : "hidden md:flex"}
+              expenses={expenses}
+              token={token}
+              onExpenseChange={fetchExpenses}
+              onUnauthorized={handleLogout}
+              loading={expensesLoading}
+              highlightIds={highlightIds}
+            />
+          </Suspense>
         </div>
 
       </div>
