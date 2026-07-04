@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   Car, Home, Package, Plane, UtensilsCrossed, Coffee, ShoppingCart, Sofa,
-  Film, SprayCan, HeartPulse, Shirt, Phone, Bus, Fuel, Sparkles, Zap, Repeat, X, ArrowUp, MoreHorizontal,
+  Film, SprayCan, HeartPulse, Shirt, Phone, Bus, Fuel, Sparkles, Zap, Repeat, X, ArrowUp,
   Flag, Trash2, Wallet, Search, ChevronDown,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -11,7 +11,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerTrigger } from "@/components/ui/drawer";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useMediaQuery } from "@/hooks/use-media-query";
 
 const CATEGORY_ICONS = {
@@ -658,17 +657,6 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
     setDeleteConfirm(null);
   };
 
-  const exportCSV = async () => {
-    const res = await authFetch("/expenses/export");
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "expenses.csv";
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
   return (
     <div className={`${className} flex-col flex-1 overflow-hidden bg-background`}>
 
@@ -833,19 +821,6 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
               </button>
             )}
           </div>
-
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button className="shrink-0 w-8 h-8 flex items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
-                <MoreHorizontal className="w-4 h-4" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-36">
-              <DropdownMenuItem onClick={exportCSV} className="text-xs cursor-pointer">
-                Export CSV
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
         </div>
       </div>
 
@@ -946,6 +921,7 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
                     <span className="text-sm font-semibold text-foreground tabular-nums shrink-0">${e.amount.toFixed(2)}</span>
                     <button
                       onClick={(ev) => toggleFlag(e, ev)}
+                      aria-label={e.flagged ? "Unflag expense" : "Flag expense"}
                       className={`shrink-0 w-7 h-7 flex items-center justify-center rounded-md text-sm transition-colors ${
                         e.flagged ? "text-amber-500 dark:text-amber-400" : "text-muted-foreground/30 hover:text-amber-500"
                       }`}
@@ -993,6 +969,7 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
                 <td className="py-3 px-1">
                   <button
                     onClick={(ev) => toggleFlag(e, ev)}
+                    aria-label={e.flagged ? "Unflag expense" : "Flag expense"}
                     className={`w-9 h-9 flex items-center justify-center rounded-md text-sm transition-all ${
                       e.flagged
                         ? "text-amber-500 dark:text-amber-400"
@@ -1004,6 +981,7 @@ export default function ExpenseTable({ expenses, className = "", token, onExpens
                   <button
                     className="opacity-0 group-hover:opacity-100 w-9 h-9 flex items-center justify-center rounded-md text-sm text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all"
                     onClick={(ev) => { ev.stopPropagation(); deleteExpenseById(e.id); }}
+                    aria-label="Delete expense"
                   >✕</button>
                 </td>
               </tr>

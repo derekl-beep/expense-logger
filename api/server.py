@@ -95,8 +95,8 @@ def chat_stream_endpoint(
 ):
     def generate():
         try:
-            for chunk in stream_chat(req.message, user_id, username, _images_payload(req)):
-                yield f"data: {json.dumps({'text': chunk})}\n\n"
+            for event in stream_chat(req.message, user_id, username, _images_payload(req)):
+                yield f"data: {json.dumps(event)}\n\n"
         except Exception:
             logger.error("stream_chat error:\n%s", traceback.format_exc())
             yield f"data: {json.dumps({'error': 'Something went wrong. Please try again.'})}\n\n"

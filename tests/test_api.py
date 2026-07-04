@@ -164,8 +164,8 @@ def test_chat_clear_endpoint(auth_headers, user_id):
 
 def test_chat_stream_endpoint_streams_chunks(monkeypatch, auth_headers):
     def fake_stream_chat(message, user_id, username, images):
-        yield "Hello"
-        yield " world"
+        yield {"text": "Hello"}
+        yield {"text": " world"}
 
     monkeypatch.setattr(server, "stream_chat", fake_stream_chat)
 
@@ -176,9 +176,23 @@ def test_chat_stream_endpoint_streams_chunks(monkeypatch, auth_headers):
     assert "data: [DONE]" in response.text
 
 
+def test_chat_stream_endpoint_forwards_tool_status_events(monkeypatch, auth_headers):
+    def fake_stream_chat(message, user_id, username, images):
+        yield {"status": "Saving expense…"}
+        yield {"text": "Done!"}
+
+    monkeypatch.setattr(server, "stream_chat", fake_stream_chat)
+
+    response = client.post("/chat/stream", json={"message": "hi"}, headers=auth_headers)
+
+    assert response.status_code == 200
+    assert '"status"' in response.text
+    assert "Saving expense" in response.text
+
+
 def test_chat_stream_endpoint_reports_error_on_exception(monkeypatch, auth_headers):
     def fake_stream_chat(message, user_id, username, images):
-        yield "partial"
+        yield {"text": "partial"}
         raise RuntimeError("boom")
 
     monkeypatch.setattr(server, "stream_chat", fake_stream_chat)

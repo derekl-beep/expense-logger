@@ -40,6 +40,8 @@ export default function Chat({ onExpenseChange, className = "", token, username,
   const [messages, setMessages] = useState(() => loadMessages(username));
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [agentStatus, setAgentStatus] = useState(null);
+  const [slow, setSlow] = useState(false);
   const [images, setImages] = useState([]); // [{ data, mediaType, previewUrl }]
   const MAX_IMAGES = 6;
   const bottomRef = useRef(null);
@@ -48,6 +50,13 @@ export default function Chat({ onExpenseChange, className = "", token, username,
   const lastFileAttachRef = useRef(0);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [suggestions, setSuggestions] = useState([]);
+
+  // Show "Still working…" if a turn runs long, so a slow tool call doesn't read as hung.
+  useEffect(() => {
+    if (!loading) return;
+    const t = setTimeout(() => setSlow(true), 6000);
+    return () => { clearTimeout(t); setSlow(false); };
+  }, [loading]);
 
   useEffect(() => {
     fetch("/chat/suggestions").then((r) => r.json()).then(setSuggestions).catch(() => {});
@@ -120,65 +129,80 @@ export default function Chat({ onExpenseChange, className = "", token, username,
         imagePreviews: attachedImages.map((img) => img.previewUrl),
         ts: Date.now(),
       },
+      { role: "agent", text: "", ts: Date.now() },
     ]);
     setLoading(true);
+    setAgentStatus(null);
 
-    const res = await fetch("/chat/stream", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        message: text,
-        images: attachedImages.length
-          ? attachedImages.map((img) => ({ data: img.data, media_type: img.mediaType }))
-          : null,
-      }),
-    });
+    const failMessage = (text) => {
+      setMessages((prev) => {
+        const updated = [...prev];
+        updated[updated.length - 1] = { role: "agent", text, error: true, ts: Date.now() };
+        return updated;
+      });
+    };
 
-    if (res.status === 401) { onLogout(); return; }
-    if (res.status === 429) {
-      const { detail } = await res.json();
-      setMessages((prev) => [...prev, { role: "agent", text: detail, error: true, ts: Date.now() }]);
-      setLoading(false);
-      return;
-    }
+    try {
+      const res = await fetch("/chat/stream", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          message: text,
+          images: attachedImages.length
+            ? attachedImages.map((img) => ({ data: img.data, media_type: img.mediaType }))
+            : null,
+        }),
+      });
 
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    setMessages((prev) => [...prev, { role: "agent", text: "", ts: Date.now() }]);
+      if (res.status === 401) { onLogout(); return; }
+      if (res.status === 429) {
+        const { detail } = await res.json();
+        failMessage(detail);
+        return;
+      }
+      if (!res.ok) {
+        failMessage("Something went wrong. Please try again.");
+        return;
+      }
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      for (const line of decoder.decode(value).split("\n")) {
-        if (!line.startsWith("data: ")) continue;
-        const payload = line.slice(6);
-        if (payload === "[DONE]") break;
-        try {
-          const data = JSON.parse(payload);
-          if (data.error) {
-            setMessages((prev) => {
-              const updated = [...prev];
-              updated[updated.length - 1] = { role: "agent", text: data.error, error: true, ts: Date.now() };
-              return updated;
-            });
-          } else {
-            setMessages((prev) => {
-              const updated = [...prev];
-              const last = updated[updated.length - 1];
-              updated[updated.length - 1] = { ...last, text: last.text + data.text };
-              return updated;
-            });
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        for (const line of decoder.decode(value).split("\n")) {
+          if (!line.startsWith("data: ")) continue;
+          const payload = line.slice(6);
+          if (payload === "[DONE]") break;
+          try {
+            const data = JSON.parse(payload);
+            if (data.error) {
+              failMessage(data.error);
+            } else if (data.status) {
+              setAgentStatus(data.status);
+            } else if (data.text) {
+              setMessages((prev) => {
+                const updated = [...prev];
+                const last = updated[updated.length - 1];
+                updated[updated.length - 1] = { ...last, text: last.text + data.text };
+                return updated;
+              });
+            }
+          } catch {
+            // incomplete SSE chunk — wait for the rest to arrive
           }
-        } catch {
-          // incomplete SSE chunk — wait for the rest to arrive
         }
       }
+      onExpenseChange();
+    } catch {
+      failMessage("Could not connect to the server. Please try again.");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
-    onExpenseChange();
   };
 
   const send = () => {
@@ -225,6 +249,21 @@ export default function Chat({ onExpenseChange, className = "", token, username,
     fetch("/chat/clear", { method: "POST", headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
   };
 
+  const exportCSV = async () => {
+    const res = await fetch("/expenses/export", { headers: { Authorization: `Bearer ${token}` } });
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "expenses.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const lastMessage = messages[messages.length - 1];
+  const showStatusBubble = loading && lastMessage?.role === "agent" && lastMessage.text === "";
+  const displayMessages = showStatusBubble ? messages.slice(0, -1) : messages;
+
   return (
     <div className={`${className} flex-col bg-background border-r border-border w-full md:w-96 md:shrink-0`}>
 
@@ -251,13 +290,16 @@ export default function Chat({ onExpenseChange, className = "", token, username,
           </button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="w-7 h-7 flex items-center justify-center rounded-md text-muted-foreground hover:bg-muted transition-colors">
+              <button aria-label="More options" className="w-7 h-7 flex items-center justify-center rounded-md text-muted-foreground hover:bg-muted transition-colors">
                 <MoreHorizontal className="w-4 h-4" />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-40">
               <DropdownMenuItem onClick={onToggleDark} className="text-xs cursor-pointer">
                 {dark ? "Light mode" : "Dark mode"}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={exportCSV} className="text-xs cursor-pointer">
+                Export CSV
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={onLogout} className="text-xs cursor-pointer text-destructive focus:text-destructive">
@@ -271,7 +313,7 @@ export default function Chat({ onExpenseChange, className = "", token, username,
       {/* Messages */}
       <div className="relative flex-1 overflow-hidden">
       <div ref={messagesContainerRef} onScroll={handleMessagesScroll} className="h-full overflow-y-auto overscroll-contain p-4 flex flex-col gap-3">
-        {messages.map((m, i) => (
+        {displayMessages.map((m, i) => (
           <div key={i} className={`flex items-end gap-2 ${m.role === "user" ? "justify-end" : "justify-start"}`}>
             {m.role === "agent" && (
               <div className="shrink-0 w-7 h-7 rounded-full bg-muted text-muted-foreground flex items-center justify-center">
@@ -305,7 +347,7 @@ export default function Chat({ onExpenseChange, className = "", token, username,
             )}
           </div>
         ))}
-        {messages.length === 1 && suggestions.length > 0 && (
+        {displayMessages.length === 1 && suggestions.length > 0 && (
           <div className="flex flex-wrap gap-1.5 pl-1">
             {suggestions.map((s) => (
               <button
@@ -318,13 +360,13 @@ export default function Chat({ onExpenseChange, className = "", token, username,
             ))}
           </div>
         )}
-        {loading && (
+        {showStatusBubble && (
           <div className="flex items-end gap-2 justify-start">
             <div className="shrink-0 w-7 h-7 rounded-full bg-muted text-muted-foreground flex items-center justify-center">
               <Bot className="w-4 h-4" />
             </div>
-            <div className="bg-muted text-muted-foreground text-sm px-3.5 py-2.5 rounded-2xl rounded-bl-sm italic">
-              Thinking…
+            <div className="bg-muted text-muted-foreground text-sm px-3.5 py-2.5 rounded-2xl rounded-bl-sm italic transition-all">
+              {agentStatus || (slow ? "Still working…" : "Thinking…")}
             </div>
           </div>
         )}

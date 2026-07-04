@@ -80,8 +80,11 @@ test("search filters the expense list by description", async ({ page }) => {
 });
 
 test("exporting CSV downloads a file containing seeded expense data", async ({ page }) => {
-  const controlsRow = page.locator("div.flex.items-center.gap-2").filter({ has: page.getByPlaceholder("Search…") });
-  await controlsRow.locator('[aria-haspopup="menu"]').click();
+  // Export lives in the Chat pane's overflow menu, not the Expenses pane.
+  const chatTab = page.getByRole("button", { name: "Chat" });
+  if (await chatTab.isVisible()) await chatTab.click();
+
+  await page.getByRole("button", { name: "More options" }).click();
 
   const downloadPromise = page.waitForEvent("download");
   await page.getByText("Export CSV").click();

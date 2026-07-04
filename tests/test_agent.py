@@ -170,9 +170,9 @@ def test_stream_chat_yields_text_chunks_on_end_turn(monkeypatch):
     final = make_response([make_block("text", text="Hi!")], "end_turn")
     monkeypatch.setattr(main.client.messages, "stream", lambda **kw: FakeStream(["Hi", "!"], final))
 
-    chunks = list(main.stream_chat("hello", user_id=3))
+    events = list(main.stream_chat("hello", user_id=3))
 
-    assert chunks == ["Hi", "!"]
+    assert events == [{"text": "Hi"}, {"text": "!"}]
 
 
 def test_stream_chat_runs_tool_then_streams_final_text(monkeypatch):
@@ -190,10 +190,45 @@ def test_stream_chat_runs_tool_then_streams_final_text(monkeypatch):
 
     monkeypatch.setattr(main.client.messages, "stream", fake_stream)
 
-    chunks = list(main.stream_chat("what did I spend?", user_id=4))
+    events = list(main.stream_chat("what did I spend?", user_id=4))
 
-    assert chunks == ["No", " expenses"]
+    assert events == [
+        {"status": "Looking up expenses…"},
+        {"text": "No"},
+        {"text": " expenses"},
+    ]
     assert streams == []
+
+
+def test_stream_chat_emits_status_for_unmapped_tool(monkeypatch):
+    main.clear_session(7)
+    monkeypatch.setitem(main.TOOL_HANDLERS, "some_new_tool", lambda **kw: [])
+
+    tool_block = make_block("tool_use", name="some_new_tool", input={}, id="tool_1")
+    streams = [
+        FakeStream([], make_response([tool_block], "tool_use")),
+        FakeStream(["Done"], make_response([make_block("text", text="Done")], "end_turn")),
+    ]
+
+    def fake_stream(**kw):
+        return streams.pop(0)
+
+    monkeypatch.setattr(main.client.messages, "stream", fake_stream)
+
+    events = list(main.stream_chat("do something new", user_id=7))
+
+    assert events[0] == {"status": "Working…"}
+
+
+def test_stream_chat_emits_status_for_images(monkeypatch):
+    main.clear_session(8)
+    final = make_response([make_block("text", text="Logged!")], "end_turn")
+    monkeypatch.setattr(main.client.messages, "stream", lambda **kw: FakeStream(["Logged!"], final))
+    monkeypatch.setattr(main, "_ocr_image", lambda data, media_type: "Total: $5")
+
+    events = list(main.stream_chat("log this", user_id=8, images=[{"data": "x", "media_type": "image/png"}]))
+
+    assert events[0] == {"status": "Reading image…"}
 
 
 def test_stream_chat_inserts_space_between_turns_missing_one(monkeypatch):
@@ -211,9 +246,10 @@ def test_stream_chat_inserts_space_between_turns_missing_one(monkeypatch):
 
     monkeypatch.setattr(main.client.messages, "stream", fake_stream)
 
-    chunks = list(main.stream_chat("log two expenses", user_id=5))
+    events = list(main.stream_chat("log two expenses", user_id=5))
+    text = "".join(e["text"] for e in events if "text" in e)
 
-    assert "".join(chunks) == "I'll log both today. Done!"
+    assert text == "I'll log both today. Done!"
 
 
 def test_stream_chat_does_not_double_space_when_turn_already_ends_in_space(monkeypatch):
@@ -231,6 +267,7 @@ def test_stream_chat_does_not_double_space_when_turn_already_ends_in_space(monke
 
     monkeypatch.setattr(main.client.messages, "stream", fake_stream)
 
-    chunks = list(main.stream_chat("log an expense", user_id=6))
+    events = list(main.stream_chat("log an expense", user_id=6))
+    text = "".join(e["text"] for e in events if "text" in e)
 
-    assert "".join(chunks) == "Logging it. Done!"
+    assert text == "Logging it. Done!"
