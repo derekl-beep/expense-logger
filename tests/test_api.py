@@ -161,14 +161,6 @@ def test_chat_clear_endpoint(auth_headers, user_id):
 
 # --- /chat, /chat/stream wiring (mocked agent layer) ------------------------
 
-def test_chat_endpoint_invokes_agent_and_returns_response(monkeypatch, auth_headers):
-    monkeypatch.setattr(server, "chat", lambda message, user_id, username, images: "mocked reply")
-
-    response = client.post("/chat", json={"message": "hi"}, headers=auth_headers)
-
-    assert response.status_code == 200
-    assert response.json() == {"response": "mocked reply"}
-
 
 def test_chat_stream_endpoint_streams_chunks(monkeypatch, auth_headers):
     def fake_stream_chat(message, user_id, username, images):

@@ -222,23 +222,23 @@ def test_category_breakdown_filters_by_logged_by(user_id):
 # --- get_monthly_trend ------------------------------------------------------
 
 def test_monthly_trend_groups_by_calendar_month(user_id):
-    add_expense(user_id, 100, "Dining", "A", "2026-05-15")
-    add_expense(user_id, 50, "Dining", "B", "2026-06-01")
-    add_expense(user_id, 25, "Dining", "C", "2026-06-15")
+    add_expense(user_id, 100, "Dining", "A", "2026-06-01")
+    add_expense(user_id, 50, "Dining", "B", "2026-07-01")
+    add_expense(user_id, 25, "Dining", "C", "2026-07-04")
 
     result = db.get_monthly_trend(category="Dining", months=2)
 
     by_month = {r["month"]: r for r in result}
-    assert by_month["2026-05"]["total"] == 100.0
-    assert by_month["2026-06"]["total"] == 75.0
-    assert by_month["2026-06"]["count"] == 2
+    assert by_month["2026-06"]["total"] == 100.0
+    assert by_month["2026-07"]["total"] == 75.0
+    assert by_month["2026-07"]["count"] == 2
 
 
 def test_monthly_trend_filters_by_logged_by(user_id):
     db.create_user("alice", "hash")
     alice_id = db.get_user_by_username("alice")["id"]
-    add_expense(user_id, 50, "Dining", "Mine", "2026-06-01")
-    add_expense(alice_id, 999, "Dining", "Alice's", "2026-06-01")
+    add_expense(user_id, 50, "Dining", "Mine", "2026-07-01")
+    add_expense(alice_id, 999, "Dining", "Alice's", "2026-07-01")
 
     result = db.get_monthly_trend(months=1, logged_by="testuser")
     assert result[0]["total"] == 50.0

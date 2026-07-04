@@ -68,9 +68,21 @@ export default function Chat({ onExpenseChange, className = "", token, username,
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
+  // Persist only on complete exchanges: when the user sends (messages.length grows)
+  // or when streaming finishes (loading flips false). Avoids serializing to
+  // localStorage on every streamed token while a response is in flight.
+  const prevLoadingRef = useRef(false);
   useEffect(() => {
-    saveMessages(messages, username);
-  }, [messages, username]);
+    const last = messages[messages.length - 1];
+    if (last?.role === "user") saveMessages(messages, username);
+  // messages.length is intentional — we only want to fire when a message is added,
+  // not on every content update during streaming.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages.length, username]);
+  useEffect(() => {
+    if (prevLoadingRef.current && !loading) saveMessages(messages, username);
+    prevLoadingRef.current = loading;
+  }, [loading, messages, username]);
 
   const handleFileChange = (e) => {
     const files = Array.from(e.target.files || []);

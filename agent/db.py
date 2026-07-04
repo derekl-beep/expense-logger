@@ -1,5 +1,6 @@
 import calendar
 import os
+import threading
 from datetime import date, timedelta
 
 import psycopg2
@@ -8,13 +9,15 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-_conn = None
+# One connection per thread — psycopg2 connections are not thread-safe.
+# FastAPI runs sync routes in a thread pool; thread-local avoids contention.
+_local = threading.local()
 
 
 def _get_conn():
-    global _conn
-    if _conn is None or _conn.closed:
-        _conn = psycopg2.connect(
+    conn = getattr(_local, "conn", None)
+    if conn is None or conn.closed:
+        _local.conn = psycopg2.connect(
             os.environ["DATABASE_URL"],
             cursor_factory=psycopg2.extras.RealDictCursor,
             keepalives=1,
@@ -22,8 +25,8 @@ def _get_conn():
             keepalives_interval=10,
             keepalives_count=5,
         )
-        _conn.autocommit = True
-    return _conn
+        _local.conn.autocommit = True
+    return _local.conn
 
 
 def _run(sql: str, params=None):
@@ -33,8 +36,7 @@ def _run(sql: str, params=None):
         return cur
     except (psycopg2.InterfaceError, psycopg2.OperationalError):
         # Connection was dropped (e.g. Neon idle timeout) — reconnect and retry once
-        global _conn
-        _conn = None
+        _local.conn = None
         cur = _get_conn().cursor()
         cur.execute(sql, params or [])
         return cur
@@ -77,6 +79,7 @@ _run("""
 
 _run("ALTER TABLE expenses ADD COLUMN IF NOT EXISTS flagged BOOLEAN DEFAULT FALSE")
 _run("ALTER TABLE expenses ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id)")
+_run("ALTER TABLE expenses ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ")
 
 _run("CREATE INDEX IF NOT EXISTS expenses_description_trgm_idx ON expenses USING gin (description gin_trgm_ops)")
 
@@ -119,27 +122,43 @@ def save_expense(amount: float, category: str, description: str, date: str, user
     if description:
         description = description[0].upper() + description[1:]
 
-    dup_cur = _run(
-        """
-        SELECT id FROM expenses
-        WHERE user_id = %s AND date = %s AND amount = %s AND similarity(description, %s) > 0.4
-        ORDER BY similarity(description, %s) DESC
-        LIMIT 1
-        """,
-        (user_id, date, amount, description, description),
-    )
-    duplicate = dup_cur.fetchone()
+    # Run duplicate check + insert + flag as a single transaction so a crash
+    # between statements can't leave the DB in a half-applied state.
+    conn = _get_conn()
+    conn.autocommit = False
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT id FROM expenses
+            WHERE user_id = %s AND date = %s AND amount = %s
+              AND similarity(description, %s) > 0.4
+              AND deleted_at IS NULL
+            ORDER BY similarity(description, %s) DESC
+            LIMIT 1
+            """,
+            (user_id, date, amount, description, description),
+        )
+        duplicate = cur.fetchone()
 
-    cur = _run(
-        "INSERT INTO expenses (amount, category, description, date, user_id, flagged) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
-        (amount, category, description, date, user_id, duplicate is not None),
-    )
-    row = cur.fetchone()
+        cur.execute(
+            "INSERT INTO expenses (amount, category, description, date, user_id, flagged) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
+            (amount, category, description, date, user_id, duplicate is not None),
+        )
+        row = cur.fetchone()
+
+        if duplicate:
+            cur.execute("UPDATE expenses SET flagged = TRUE WHERE id = %s", (duplicate["id"],))
+
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.autocommit = True
 
     if duplicate:
-        _run("UPDATE expenses SET flagged = TRUE WHERE id = %s", (duplicate["id"],))
         return {"status": "saved", "id": row["id"], "possible_duplicate_of": duplicate["id"]}
-
     return {"status": "saved", "id": row["id"]}
 
 
@@ -149,7 +168,7 @@ def find_similar_expenses(description: str, limit: int = 3) -> list[dict]:
         """
         SELECT description, category, similarity(description, %s) AS score
         FROM expenses
-        WHERE similarity(description, %s) > 0.3
+        WHERE similarity(description, %s) > 0.3 AND deleted_at IS NULL
         ORDER BY score DESC
         LIMIT %s
         """,
@@ -172,7 +191,7 @@ def get_expenses(
         SELECT e.id, e.amount, e.category, e.description, e.date, e.flagged, u.username AS logged_by
         FROM expenses e
         LEFT JOIN users u ON e.user_id = u.id
-        WHERE 1=1
+        WHERE e.deleted_at IS NULL
     """
     params = []
     if start_date:
@@ -214,7 +233,7 @@ def get_average_transaction(
         SELECT AVG(e.amount) AS average, COUNT(*) AS count
         FROM expenses e
         LEFT JOIN users u ON e.user_id = u.id
-        WHERE 1=1
+        WHERE e.deleted_at IS NULL
     """
     params = []
     if category:
@@ -247,7 +266,7 @@ def get_category_breakdown(start_date: str = None, end_date: str = None, logged_
         SELECT e.category, SUM(e.amount) AS total, COUNT(*) AS count
         FROM expenses e
         LEFT JOIN users u ON e.user_id = u.id
-        WHERE 1=1
+        WHERE e.deleted_at IS NULL
     """
     params = []
     if start_date:
@@ -274,7 +293,7 @@ def get_monthly_trend(category: str = None, months: int = 6, logged_by: str = No
         SELECT date_trunc('month', e.date)::date AS month, SUM(e.amount) AS total, COUNT(*) AS count
         FROM expenses e
         LEFT JOIN users u ON e.user_id = u.id
-        WHERE e.date >= %s
+        WHERE e.date >= %s AND e.deleted_at IS NULL
     """
     params = [start.isoformat()]
     if category:
@@ -295,21 +314,33 @@ def get_run_rate(category: str, reference_date: str = None, compare_months: int 
     days_elapsed = ref.day
 
     cur = _run(
-        "SELECT COALESCE(SUM(amount), 0) AS total FROM expenses WHERE LOWER(category) = LOWER(%s) AND date >= %s AND date <= %s",
+        "SELECT COALESCE(SUM(amount), 0) AS total FROM expenses WHERE LOWER(category) = LOWER(%s) AND date >= %s AND date <= %s AND deleted_at IS NULL",
         (category, month_start.isoformat(), ref.isoformat()),
     )
     spent_so_far = float(cur.fetchone()["total"])
     projected_total = round(spent_so_far / days_elapsed * days_in_month, 2) if days_elapsed else 0.0
 
-    prior_months = []
-    for i in range(1, compare_months + 1):
-        m_start = _shift_month(month_start, -i)
-        m_end = _shift_month(month_start, -i + 1) - timedelta(days=1)
-        cur = _run(
-            "SELECT COALESCE(SUM(amount), 0) AS total FROM expenses WHERE LOWER(category) = LOWER(%s) AND date >= %s AND date <= %s",
-            (category, m_start.isoformat(), m_end.isoformat()),
-        )
-        prior_months.append({"month": m_start.isoformat()[:7], "total": float(cur.fetchone()["total"])})
+    # Fetch all prior months in one query instead of N separate calls.
+    ranges = [
+        (_shift_month(month_start, -i), _shift_month(month_start, -i + 1) - timedelta(days=1))
+        for i in range(1, compare_months + 1)
+    ]
+    select_cols = ", ".join(
+        f"COALESCE(SUM(CASE WHEN date >= %s AND date <= %s THEN amount END), 0) AS m{i}"
+        for i in range(len(ranges))
+    )
+    params: list = []
+    for m_start, m_end in ranges:
+        params.extend([m_start.isoformat(), m_end.isoformat()])
+    params.append(category)
+    row = _run(
+        f"SELECT {select_cols} FROM expenses WHERE LOWER(category) = LOWER(%s) AND deleted_at IS NULL",
+        params,
+    ).fetchone()
+    prior_months = [
+        {"month": ranges[i][0].isoformat()[:7], "total": float(row[f"m{i}"])}
+        for i in range(len(ranges))
+    ]
 
     last_month_total = prior_months[0]["total"] if prior_months else None
     pct_change_vs_last_month = (
@@ -335,7 +366,7 @@ def get_weekly_pace(category: str = None, reference_date: str = None, compare_we
     days_elapsed = (ref - week_start).days + 1
 
     def _week_total(start: date, end: date) -> float:
-        query = "SELECT COALESCE(SUM(amount), 0) AS total FROM expenses WHERE date >= %s AND date <= %s"
+        query = "SELECT COALESCE(SUM(amount), 0) AS total FROM expenses WHERE date >= %s AND date <= %s AND deleted_at IS NULL"
         params = [start.isoformat(), end.isoformat()]
         if category:
             query += " AND LOWER(category) = LOWER(%s)"
@@ -380,7 +411,7 @@ def get_yoy_comparison(category: str = None, month: str = None, logged_by: str =
 
     def _month_total(start: date) -> float:
         end = _shift_month(start, 1) - timedelta(days=1)
-        query = "SELECT COALESCE(SUM(amount), 0) AS total FROM expenses e LEFT JOIN users u ON e.user_id = u.id WHERE e.date >= %s AND e.date <= %s"
+        query = "SELECT COALESCE(SUM(amount), 0) AS total FROM expenses e LEFT JOIN users u ON e.user_id = u.id WHERE e.date >= %s AND e.date <= %s AND e.deleted_at IS NULL"
         params = [start.isoformat(), end.isoformat()]
         if category:
             query += " AND LOWER(e.category) = LOWER(%s)"
@@ -422,14 +453,14 @@ def get_top_expenses(
             SELECT e.description, SUM(e.amount) AS total, COUNT(*) AS count
             FROM expenses e
             LEFT JOIN users u ON e.user_id = u.id
-            WHERE 1=1
+            WHERE e.deleted_at IS NULL
         """
     else:
         query = """
             SELECT e.id, e.amount, e.category, e.description, e.date, u.username AS logged_by
             FROM expenses e
             LEFT JOIN users u ON e.user_id = u.id
-            WHERE 1=1
+            WHERE e.deleted_at IS NULL
         """
     if start_date:
         query += " AND e.date >= %s"
@@ -461,7 +492,7 @@ def get_user_breakdown(start_date: str = None, end_date: str = None, category: s
         SELECT u.username AS logged_by, SUM(e.amount) AS total, COUNT(*) AS count
         FROM expenses e
         LEFT JOIN users u ON e.user_id = u.id
-        WHERE 1=1
+        WHERE e.deleted_at IS NULL
     """
     params = []
     if start_date:
@@ -486,7 +517,7 @@ def get_weekday_pattern(start_date: str = None, end_date: str = None, category: 
         SELECT EXTRACT(DOW FROM e.date)::int AS dow, SUM(e.amount) AS total, COUNT(*) AS count
         FROM expenses e
         LEFT JOIN users u ON e.user_id = u.id
-        WHERE 1=1
+        WHERE e.deleted_at IS NULL
     """
     params = []
     if start_date:
@@ -542,6 +573,7 @@ def get_recurring_expenses() -> list[dict]:
                 date,
                 date - LAG(date) OVER (PARTITION BY description, amount ORDER BY date) AS gap_days
             FROM expenses
+            WHERE deleted_at IS NULL
         )
         SELECT
             description, amount, category,
@@ -604,12 +636,16 @@ def update_expense(
         return {"status": "nothing to update"}
 
     params.append(id)
-    _run(f"UPDATE expenses SET {', '.join(fields)} WHERE id = %s", params)
+    cur = _run(f"UPDATE expenses SET {', '.join(fields)} WHERE id = %s AND deleted_at IS NULL", params)
+    if cur.rowcount == 0:
+        return {"status": "not_found"}
     return {"status": "updated"}
 
 
 def delete_expense(id: int) -> dict:
-    _run("DELETE FROM expenses WHERE id = %s", (id,))
+    cur = _run("UPDATE expenses SET deleted_at = NOW() WHERE id = %s AND deleted_at IS NULL", (id,))
+    if cur.rowcount == 0:
+        return {"status": "not_found"}
     return {"status": "deleted"}
 
 
@@ -624,21 +660,26 @@ def get_budget_status(category: str = None, month: str = None) -> list[dict]:
     month_start = ref.replace(day=1)
     month_end = _shift_month(month_start, 1)
 
-    query = "SELECT category, monthly_limit FROM budgets WHERE 1=1"
-    params = []
+    # Single JOIN instead of N+1 per-category queries.
+    query = """
+        SELECT b.category, b.monthly_limit,
+               COALESCE(SUM(e.amount), 0) AS spent
+        FROM budgets b
+        LEFT JOIN expenses e
+               ON LOWER(e.category) = LOWER(b.category)
+              AND e.date >= %s AND e.date < %s
+              AND e.deleted_at IS NULL
+        WHERE 1=1
+    """
+    params: list = [month_start.isoformat(), month_end.isoformat()]
     if category:
-        query += " AND LOWER(category) = LOWER(%s)"
+        query += " AND LOWER(b.category) = LOWER(%s)"
         params.append(category)
-    query += " ORDER BY category"
-    budgets = _run(query, params).fetchall()
+    query += " GROUP BY b.category, b.monthly_limit ORDER BY b.category"
 
     status = []
-    for b in budgets:
-        cur = _run(
-            "SELECT COALESCE(SUM(amount), 0) AS total FROM expenses WHERE LOWER(category) = LOWER(%s) AND date >= %s AND date < %s",
-            (b["category"], month_start.isoformat(), month_end.isoformat()),
-        )
-        spent = float(cur.fetchone()["total"])
+    for b in _run(query, params).fetchall():
+        spent = float(b["spent"])
         limit = float(b["monthly_limit"])
         status.append({
             "category": b["category"],
