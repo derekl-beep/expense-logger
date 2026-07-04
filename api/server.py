@@ -18,6 +18,7 @@ from agent.db import (
     delete_budget,
     delete_expense,
     get_api_call_count,
+    get_budget_status,
     get_budgets,
     get_expenses,
     get_recurring_expenses,
@@ -138,6 +139,17 @@ class BudgetRequest(BaseModel):
 @app.get("/budgets")
 def budgets_endpoint(user_id: int = Depends(get_current_user)):
     return get_budgets()
+
+
+# Matches the "near budget" color threshold already used in the frontend
+# (BreakdownRow / BudgetSettings) — an insight is only worth surfacing
+# unprompted once a category is at least this close to its limit.
+INSIGHT_THRESHOLD_PCT = 80
+
+
+@app.get("/insights")
+def insights_endpoint(user_id: int = Depends(get_current_user)):
+    return [s for s in get_budget_status() if s["pct_used"] >= INSIGHT_THRESHOLD_PCT]
 
 
 @app.put("/budgets/{category}")

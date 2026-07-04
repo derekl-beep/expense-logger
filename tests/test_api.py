@@ -101,6 +101,43 @@ def test_budgets_crud_via_api(auth_headers):
     assert client.get("/budgets", headers=auth_headers).json() == []
 
 
+# --- insights ----------------------------------------------------------------
+
+def test_insights_endpoint_omits_categories_with_no_budget(auth_headers, user_id):
+    add_expense(user_id, 50, "Dining", "Lunch", "2026-07-01")
+
+    assert client.get("/insights", headers=auth_headers).json() == []
+
+
+def test_insights_endpoint_omits_categories_comfortably_under_budget(auth_headers, user_id):
+    client.put("/budgets/Dining", json={"monthly_limit": 300}, headers=auth_headers)
+    add_expense(user_id, 50, "Dining", "Lunch", "2026-07-01")
+
+    assert client.get("/insights", headers=auth_headers).json() == []
+
+
+def test_insights_endpoint_includes_categories_near_or_over_budget(auth_headers, user_id):
+    client.put("/budgets/Dining", json={"monthly_limit": 100}, headers=auth_headers)
+    add_expense(user_id, 85, "Dining", "Groceries run", "2026-07-01")
+
+    result = client.get("/insights", headers=auth_headers).json()
+
+    assert len(result) == 1
+    assert result[0]["category"] == "Dining"
+    assert result[0]["pct_used"] == 85.0
+    assert result[0]["over_budget"] is False
+
+
+def test_insights_endpoint_includes_category_at_exactly_the_threshold(auth_headers, user_id):
+    client.put("/budgets/Dining", json={"monthly_limit": 100}, headers=auth_headers)
+    add_expense(user_id, 80, "Dining", "Groceries run", "2026-07-01")
+
+    result = client.get("/insights", headers=auth_headers).json()
+
+    assert len(result) == 1
+    assert result[0]["pct_used"] == 80.0
+
+
 # --- update/delete expense --------------------------------------------------
 
 def test_update_expense_with_invalid_category_returns_422(auth_headers, user_id):
