@@ -12,6 +12,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 const TTL_MS = 24 * 60 * 60 * 1000;
+// Backstop for a silently hung connection (no error, no more data, [DONE]
+// never arrives). Kept comfortably above the backend's own 120s per-call
+// Claude API timeout so a legitimately slow multi-tool-call turn isn't cut off.
+const FETCH_TIMEOUT_MS = 150 * 1000;
 
 const INITIAL_MESSAGE = { role: "agent", text: "Hi! Log an expense or ask about your spending.", ts: Date.now() };
 
@@ -134,13 +138,21 @@ export default function Chat({ onExpenseChange, className = "", token, username,
     setLoading(true);
     setAgentStatus(null);
 
+    // On error, keep any partial text that already streamed in rather than
+    // wiping it — a timeout or dropped connection mid-answer shouldn't erase
+    // what the user already saw arrive.
     const failMessage = (text) => {
       setMessages((prev) => {
         const updated = [...prev];
-        updated[updated.length - 1] = { role: "agent", text, error: true, ts: Date.now() };
+        const last = updated[updated.length - 1];
+        const prefix = last?.text ? last.text + "\n\n" : "";
+        updated[updated.length - 1] = { ...last, text: prefix + text, error: true, ts: Date.now() };
         return updated;
       });
     };
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
     try {
       const res = await fetch("/chat/stream", {
@@ -155,6 +167,7 @@ export default function Chat({ onExpenseChange, className = "", token, username,
             ? attachedImages.map((img) => ({ data: img.data, media_type: img.mediaType }))
             : null,
         }),
+        signal: controller.signal,
       });
 
       if (res.status === 401) { onLogout(); return; }
@@ -198,9 +211,14 @@ export default function Chat({ onExpenseChange, className = "", token, username,
         }
       }
       onExpenseChange();
-    } catch {
-      failMessage("Could not connect to the server. Please try again.");
+    } catch (err) {
+      if (err.name === "AbortError") {
+        failMessage("This is taking longer than expected. Please try again.");
+      } else {
+        failMessage("Could not connect to the server. Please try again.");
+      }
     } finally {
+      clearTimeout(timeoutId);
       setLoading(false);
     }
   };

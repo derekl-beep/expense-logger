@@ -37,6 +37,28 @@ test("clicking New chat resets the conversation to the initial welcome message",
   await expect(page.getByText("Hi! Log an expense or ask about your spending.")).toBeVisible();
 });
 
+test("an error mid-stream keeps the partial answer instead of wiping it", async ({ page }) => {
+  // Mock the SSE stream directly so we can deterministically simulate a
+  // real backend (some text already streamed) hitting an error partway
+  // through, independent of the dummy-API-key failure mode used elsewhere
+  // in this file (which fails before any text streams).
+  await page.route("**/chat/stream", async (route) => {
+    const body = [
+      `data: ${JSON.stringify({ text: "Your dining spend so far is $42. " })}`,
+      `data: ${JSON.stringify({ error: "Something went wrong. Please try again." })}`,
+      "data: [DONE]",
+      "",
+    ].join("\n\n");
+    await route.fulfill({ status: 200, contentType: "text/event-stream", body });
+  });
+
+  await page.getByPlaceholder("e.g. $5 coffee today").fill("how much on dining?");
+  await page.getByRole("button", { name: "Send message" }).click();
+
+  await expect(page.getByText("Your dining spend so far is $42.", { exact: false })).toBeVisible();
+  await expect(page.getByText("Something went wrong. Please try again.")).toBeVisible();
+});
+
 test("attaching an image shows a preview thumbnail that can be removed", async ({ page }) => {
   await page.locator('input[type="file"]').setInputFiles({
     name: "receipt.png",
