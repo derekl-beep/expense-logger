@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { X, ArrowUp, Flag, Trash2, Wallet, Search, ChevronDown } from "lucide-react";
+import { X, ArrowUp, Flag, Trash2, Wallet, Search, ChevronDown, Split } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerTrigger } from "@/components/ui/drawer";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { CategoryBadge, BreakdownRow } from "@/components/CategoryVisuals";
 import { useAnimatedNumber } from "@/lib/categoryVisuals";
@@ -562,22 +563,32 @@ export default function ExpenseTable({ expenses, className = "", token, username
             <div>
               <div className="flex items-baseline justify-between">
                 <label className="text-xs text-muted-foreground mb-1 block">Amount</label>
-                <div className="flex gap-1">
-                  {[2, 3, 4].map((n) => (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
                     <button
-                      key={n}
                       type="button"
-                      title={`Split ${n} ways`}
-                      onClick={() => setEditValues((v) => {
-                        const amt = parseFloat(v.amount);
-                        return Number.isFinite(amt) ? { ...v, amount: Math.round((amt / n) * 100) / 100 } : v;
-                      })}
-                      className="text-xs px-1.5 py-0.5 rounded border border-border text-muted-foreground outline-none hover:bg-muted focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 transition-colors"
+                      title="Split this expense"
+                      aria-label="Split this expense"
+                      className="w-6 h-6 flex items-center justify-center rounded border border-border text-muted-foreground outline-none hover:bg-muted focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 transition-colors"
                     >
-                      {["½", "⅓", "¼"][n - 2]}
+                      <Split className="w-3.5 h-3.5" />
                     </button>
-                  ))}
-                </div>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    {[2, 3, 4].map((n) => (
+                      <DropdownMenuItem
+                        key={n}
+                        className="text-xs cursor-pointer"
+                        onClick={() => setEditValues((v) => {
+                          const amt = parseFloat(v.amount);
+                          return Number.isFinite(amt) ? { ...v, amount: Math.round((amt / n) * 100) / 100 } : v;
+                        })}
+                      >
+                        Split {["½", "⅓", "¼"][n - 2]} ({n} ways)
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
               <Input type="number" inputMode="decimal" step="0.01" value={editValues.amount ?? ""} className="h-9 text-base md:text-sm"
                 onChange={(e) => setEditValues({ ...editValues, amount: parseFloat(e.target.value) })} />
