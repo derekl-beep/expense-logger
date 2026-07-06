@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { toast } from "sonner";
-import { ArrowDown, ArrowUp, Bot, Command, ImagePlus, Mic, MessageCircle, MessageSquarePlus, MoreHorizontal, Square, User } from "lucide-react";
+import { ArrowDown, ArrowUp, Bot, Command, ImagePlus, Mic, MessageCircle, MessageSquarePlus, Moon, MoreHorizontal, Square, Sun, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -86,6 +86,12 @@ const BreakdownCard = ({ breakdown, grand_total }) => {
 
 export default function Chat({ onExpenseChange, className = "", token, username, onLogout, dark, onToggleDark }) {
   const [messages, setMessages] = useState(() => loadMessages(username));
+  // Persists forever (unlike chat_messages_*, which has a 24h TTL) so the
+  // "how this works" explainer cards only ever show once per user, not every
+  // time the daily-reset welcome message reappears for someone who's already
+  // logged plenty of expenses.
+  const onboardedKey = `chat_onboarded_${username}`;
+  const [hasOnboarded, setHasOnboarded] = useState(() => localStorage.getItem(onboardedKey) === "1");
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [agentStatus, setAgentStatus] = useState(null);
@@ -181,15 +187,17 @@ export default function Chat({ onExpenseChange, className = "", token, username,
 
   // Proactive budget insights: a calm, dismissible note (not a modal, not an
   // agent message — no LLM call involved) for categories at or near their
-  // monthly limit. Dismissal is remembered for the day, not forever, so a
-  // still-relevant warning doesn't just vanish once and never come back.
+  // monthly limit. Dismissal is per-category and remembered for the day, not
+  // forever, so acknowledging one still-relevant warning doesn't hide a
+  // different category's warning, and neither vanishes once and never comes
+  // back.
   const [insights, setInsights] = useState([]);
   const insightsDismissKey = `insights_dismissed_${username}_${localDateString()}`;
-  const [insightsDismissed, setInsightsDismissed] = useState(() => {
+  const [dismissedCategories, setDismissedCategories] = useState(() => {
     try {
-      return localStorage.getItem(insightsDismissKey) === "1";
+      return new Set(JSON.parse(localStorage.getItem(insightsDismissKey) || "[]"));
     } catch {
-      return false;
+      return new Set();
     }
   });
 
@@ -200,13 +208,18 @@ export default function Chat({ onExpenseChange, className = "", token, username,
       .catch(() => {});
   }, [token]);
 
-  const dismissInsights = () => {
-    setInsightsDismissed(true);
-    try {
-      localStorage.setItem(insightsDismissKey, "1");
-    } catch {
-      // localStorage unavailable — dismissal just won't persist across reloads
-    }
+  const visibleInsights = insights.filter((i) => !dismissedCategories.has(i.category));
+
+  const dismissInsight = (category) => {
+    setDismissedCategories((prev) => {
+      const next = new Set(prev).add(category);
+      try {
+        localStorage.setItem(insightsDismissKey, JSON.stringify([...next]));
+      } catch {
+        // localStorage unavailable — dismissal just won't persist across reloads
+      }
+      return next;
+    });
   };
 
   // Typing "/" opens a command palette listing every analytics tool, not just
@@ -277,6 +290,10 @@ export default function Chat({ onExpenseChange, className = "", token, username,
 
   const sendMessage = async (text, displayText = null) => {
     if (!text || loading) return;
+    if (!hasOnboarded) {
+      localStorage.setItem(onboardedKey, "1");
+      setHasOnboarded(true);
+    }
     stopListening();
     const attachedImages = images;
     setImages([]);
@@ -496,6 +513,14 @@ export default function Chat({ onExpenseChange, className = "", token, username,
           >
             <MessageSquarePlus className="w-4 h-4" />
           </button>
+          <button
+            onClick={onToggleDark}
+            title={dark ? "Light mode" : "Dark mode"}
+            aria-label={dark ? "Switch to light mode" : "Switch to dark mode"}
+            className="w-7 h-7 flex items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+          >
+            {dark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+          </button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button aria-label="More options" className="w-7 h-7 flex items-center justify-center rounded-md text-muted-foreground hover:bg-muted transition-colors">
@@ -503,9 +528,6 @@ export default function Chat({ onExpenseChange, className = "", token, username,
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-40">
-              <DropdownMenuItem onClick={onToggleDark} className="text-xs cursor-pointer">
-                {dark ? "Light mode" : "Dark mode"}
-              </DropdownMenuItem>
               <DropdownMenuItem onClick={exportCSV} className="text-xs cursor-pointer">
                 Export CSV
               </DropdownMenuItem>
@@ -518,27 +540,29 @@ export default function Chat({ onExpenseChange, className = "", token, username,
         </div>
       </div>
 
-      {!insightsDismissed && insights.length > 0 && (
+      {visibleInsights.length > 0 && (
         <div className="mx-4 mt-3 rounded-xl border border-border bg-muted/40 px-3 py-2.5 shrink-0">
           <div className="flex items-start gap-2.5">
             <div className="shrink-0 w-6 h-6 rounded-full bg-muted text-muted-foreground flex items-center justify-center mt-0.5">
               <Bot className="w-3.5 h-3.5" />
             </div>
             <div className="flex-1 min-w-0 space-y-1">
-              {insights.map((i) => (
-                <p key={i.category} className="text-xs text-foreground leading-relaxed">
-                  <span className={`font-semibold ${i.over_budget ? "text-red-600 dark:text-red-400" : "text-amber-600 dark:text-amber-400"}`}>
-                    {i.category}
-                  </span>
-                  {" "}is at {i.pct_used.toFixed(0)}% of budget (${i.spent.toFixed(0)} of ${i.monthly_limit.toFixed(0)})
-                </p>
+              {visibleInsights.map((i) => (
+                <div key={i.category} className="flex items-start gap-2">
+                  <p className="flex-1 text-xs text-foreground leading-relaxed">
+                    <span className={`font-semibold ${i.over_budget ? "text-red-600 dark:text-red-400" : "text-amber-600 dark:text-amber-400"}`}>
+                      {i.category}
+                    </span>
+                    {" "}is at {i.pct_used.toFixed(0)}% of budget (${i.spent.toFixed(0)} of ${i.monthly_limit.toFixed(0)})
+                  </p>
+                  <button
+                    onClick={() => dismissInsight(i.category)}
+                    aria-label={`Dismiss ${i.category} budget insight`}
+                    className="shrink-0 text-muted-foreground hover:text-foreground text-sm leading-none"
+                  >×</button>
+                </div>
               ))}
             </div>
-            <button
-              onClick={dismissInsights}
-              aria-label="Dismiss budget insights"
-              className="shrink-0 text-muted-foreground hover:text-foreground text-sm leading-none mt-0.5"
-            >×</button>
           </div>
         </div>
       )}
@@ -581,7 +605,7 @@ export default function Chat({ onExpenseChange, className = "", token, username,
             )}
           </div>
         ))}
-        {displayMessages.length === 1 && (
+        {displayMessages.length === 1 && !hasOnboarded && (
           <div className="rounded-xl border border-border p-1.5 space-y-0.5">
             <button
               type="button"

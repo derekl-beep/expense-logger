@@ -23,6 +23,16 @@ test("opens the edit dialog pre-filled with the expense's existing details", asy
   await expect(dialog.getByRole("combobox")).toContainText("Dining");
 });
 
+test("splitting an amount divides it and updates the input", async ({ page }) => {
+  await expenseRow(page, "Dinner at Pasta House").click();
+  const dialog = page.getByRole("dialog");
+
+  await dialog.getByRole("button", { name: "Split this expense" }).click();
+  await page.getByText("Split ⅓ (3 ways)").click();
+
+  await expect(dialog.locator('input[type="number"]')).toHaveValue("12.83");
+});
+
 test("editing the description persists after reload", async ({ page }) => {
   await expenseRow(page, "Dinner at Pasta House").click();
   const dialog = page.getByRole("dialog");
