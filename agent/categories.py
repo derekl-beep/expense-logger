@@ -38,3 +38,22 @@ CATEGORY_HINTS = """Categories and what they cover:
 - Beauty: haircut, cosmetics, personal care
 - Hydro: electricity and water bills
 - Subscription: recurring digital subscriptions (Netflix, Spotify, etc.)"""
+
+INCOME_CATEGORIES = [
+    "Salary",
+    "Interest",
+    "Rebate",
+    "Reimbursement",
+    "Transfer",
+    "Gift",
+    "Other",
+]
+
+INCOME_CATEGORY_HINTS = """Income categories and what they cover:
+- Salary: payroll deposits, wages, freelance/contract income
+- Interest: bank or investment interest earned
+- Rebate: cashback, rewards, refunds from a merchant or card issuer
+- Reimbursement: money paid back to you that matches a specific expense already logged in this tracker (e.g. a friend repaying their share of a dinner you logged as an expense)
+- Transfer: money moved to you that isn't a reimbursement or gift and doesn't match a specific logged expense (e.g. a roommate's share of a bill you never logged yourself, a general e-transfer with no expense behind it)
+- Gift: money given to you with no expectation of repayment
+- Other: anything that doesn't fit the above"""

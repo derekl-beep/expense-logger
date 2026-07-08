@@ -84,6 +84,20 @@ _run("ALTER TABLE expenses ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ")
 _run("CREATE INDEX IF NOT EXISTS expenses_description_trgm_idx ON expenses USING gin (description gin_trgm_ops)")
 
 _run("""
+    CREATE TABLE IF NOT EXISTS income (
+        id          SERIAL PRIMARY KEY,
+        amount      NUMERIC(10, 2),
+        category    TEXT,
+        description TEXT,
+        date        DATE,
+        user_id     INTEGER REFERENCES users(id),
+        created_at  TIMESTAMPTZ DEFAULT NOW()
+    )
+""")
+
+_run("CREATE INDEX IF NOT EXISTS income_description_trgm_idx ON income USING gin (description gin_trgm_ops)")
+
+_run("""
     CREATE TABLE IF NOT EXISTS api_calls (
         id         SERIAL PRIMARY KEY,
         user_id    INTEGER REFERENCES users(id),
@@ -118,9 +132,12 @@ def create_user(username: str, password_hash: str) -> None:
     _run("INSERT INTO users (username, password_hash) VALUES (%s, %s)", (username, password_hash))
 
 
+def _capitalize_description(description: str) -> str:
+    return description[0].upper() + description[1:] if description else description
+
+
 def save_expense(amount: float, category: str, description: str, date: str, user_id: int = None) -> dict:
-    if description:
-        description = description[0].upper() + description[1:]
+    description = _capitalize_description(description)
 
     # Run duplicate check + insert + flag as a single transaction so a crash
     # between statements can't leave the DB in a half-applied state.
@@ -159,6 +176,17 @@ def save_expense(amount: float, category: str, description: str, date: str, user
 
     if duplicate:
         return {"status": "saved", "id": row["id"], "possible_duplicate_of": duplicate["id"]}
+    return {"status": "saved", "id": row["id"]}
+
+
+def save_income(amount: float, category: str, description: str, date: str, user_id: int = None) -> dict:
+    description = _capitalize_description(description)
+
+    cur = _run(
+        "INSERT INTO income (amount, category, description, date, user_id) VALUES (%s, %s, %s, %s, %s) RETURNING id",
+        (amount, category, description, date, user_id),
+    )
+    row = cur.fetchone()
     return {"status": "saved", "id": row["id"]}
 
 
@@ -219,6 +247,48 @@ def get_expenses(
         query += " AND e.description ILIKE %s"
         params.append(f"%{description_contains}%")
     query += " ORDER BY e.date DESC, e.id DESC"
+    cur = _run(query, params)
+    return [_row(r) for r in cur.fetchall()]
+
+
+def get_income(
+    start_date: str = None,
+    end_date: str = None,
+    category: str = None,
+    logged_by: str = None,
+    min_amount: float = None,
+    max_amount: float = None,
+    description_contains: str = None,
+) -> list[dict]:
+    query = """
+        SELECT i.id, i.amount, i.category, i.description, i.date, u.username AS logged_by
+        FROM income i
+        LEFT JOIN users u ON i.user_id = u.id
+        WHERE 1=1
+    """
+    params = []
+    if start_date:
+        query += " AND i.date >= %s"
+        params.append(start_date)
+    if end_date:
+        query += " AND i.date <= %s"
+        params.append(end_date)
+    if category:
+        query += " AND LOWER(i.category) = LOWER(%s)"
+        params.append(category)
+    if logged_by:
+        query += " AND LOWER(u.username) = LOWER(%s)"
+        params.append(logged_by)
+    if min_amount is not None:
+        query += " AND i.amount >= %s"
+        params.append(min_amount)
+    if max_amount is not None:
+        query += " AND i.amount <= %s"
+        params.append(max_amount)
+    if description_contains:
+        query += " AND i.description ILIKE %s"
+        params.append(f"%{description_contains}%")
+    query += " ORDER BY i.date DESC, i.id DESC"
     cur = _run(query, params)
     return [_row(r) for r in cur.fetchall()]
 
