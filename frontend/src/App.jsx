@@ -25,6 +25,7 @@ export default function App() {
   const [username, setUsername] = useState(() => localStorage.getItem("username") || "");
   const [expenses, setExpenses] = useState([]);
   const [expensesLoading, setExpensesLoading] = useState(true);
+  const [income, setIncome] = useState([]);
   const [highlightIds, setHighlightIds] = useState(() => new Set());
   const highlightTimeoutRef = useRef(null);
   // Diff baseline for row highlighting — a ref (not the `expenses` state
@@ -64,6 +65,7 @@ export default function App() {
     setToken(null);
     setUsername("");
     setExpenses([]);
+    setIncome([]);
   };
 
   const fetchExpenses = async () => {
@@ -104,6 +106,17 @@ export default function App() {
     setExpensesLoading(false);
   };
 
+  // Simpler than fetchExpenses — read-only view (Phase 1), no highlight/diff
+  // bookkeeping needed since there's no edit/delete flow to flash yet.
+  const fetchIncome = async () => {
+    const res = await fetch("/income", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (res.status === 401) { handleLogout(); return; }
+    const data = await res.json();
+    setIncome(data);
+  };
+
   useEffect(() => {
     if (!token) return;
     let ignore = false;
@@ -121,6 +134,17 @@ export default function App() {
         setExpenses(data);
         setExpensesLoading(false);
       }
+    })();
+    (async () => {
+      const res = await fetch("/income", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.status === 401) {
+        if (!ignore) handleLogout();
+        return;
+      }
+      const data = await res.json();
+      if (!ignore) setIncome(data);
     })();
     return () => { ignore = true; };
   }, [token]);
@@ -152,7 +176,7 @@ export default function App() {
           <Suspense fallback={<div className="flex-1" />}>
             <Chat
               className={activeTab === "chat" ? "flex" : "hidden md:flex"}
-              onExpenseChange={() => { fetchExpenses(); setActiveTab("chat"); }}
+              onExpenseChange={() => { fetchExpenses(); fetchIncome(); setActiveTab("chat"); }}
               token={token}
               username={username}
               onLogout={handleLogout}
@@ -164,6 +188,7 @@ export default function App() {
             <ExpenseTable
               className={activeTab === "expenses" ? "flex" : "hidden md:flex"}
               expenses={expenses}
+              income={income}
               token={token}
               username={username}
               onExpenseChange={fetchExpenses}

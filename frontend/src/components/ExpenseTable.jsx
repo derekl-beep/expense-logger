@@ -299,7 +299,7 @@ const BudgetDialog = ({ categories, budgetMap, spendByCategory, authFetch, onSav
   );
 };
 
-export default function ExpenseTable({ expenses, className = "", token, username, onExpenseChange, onUnauthorized, loading = false, highlightIds }) {
+export default function ExpenseTable({ expenses, income = [], className = "", token, username, onExpenseChange, onUnauthorized, loading = false, highlightIds }) {
   const authFetch = (url, opts = {}) => {
     const res = fetch(url, { ...opts, headers: { ...opts.headers, Authorization: `Bearer ${token}` } });
     res.then((r) => { if (r.status === 401) onUnauthorized(); });
@@ -342,6 +342,9 @@ export default function ExpenseTable({ expenses, className = "", token, username
     setLastSeenId(maxId);
   };
 
+  // Read-only Phase 1 income view — toggled alongside the expense list
+  // rather than as a third top-level mobile tab.
+  const [view, setView] = useState("expenses");
   const [selectedMonthOverride, setSelectedMonthOverride] = useState(null);
   const [flaggedOnly, setFlaggedOnly] = useState(false);
   const [editingExpense, setEditingExpense] = useState(null);
@@ -410,6 +413,12 @@ export default function ExpenseTable({ expenses, className = "", token, username
   const total = filtered.reduce((sum, e) => sum + e.amount, 0);
   const animatedTotal = useAnimatedNumber(total);
   const emptyMessage = items.length === 0 ? "No expenses yet" : "No expenses match your filters";
+
+  // Income view has no filters in Phase 1 — total is just the sum of
+  // whatever the API returned (already sorted date DESC server-side).
+  const incomeTotal = income.reduce((sum, i) => sum + i.amount, 0);
+  const animatedIncomeTotal = useAnimatedNumber(incomeTotal);
+  const displayTotal = view === "expenses" ? animatedTotal : animatedIncomeTotal;
 
   const budgetMap = useMemo(() => {
     const map = {};
@@ -648,8 +657,31 @@ export default function ExpenseTable({ expenses, className = "", token, username
       <div className="flex flex-col gap-2.5 px-4 py-3 border-b border-border shrink-0 md:px-5">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-1.5 min-w-0">
-            <span className="text-sm font-semibold text-foreground shrink-0">All Expenses</span>
-            {categoryFilter && (
+            <div role="tablist" aria-label="View" className="inline-flex rounded-md border border-border p-0.5 shrink-0">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={view === "expenses"}
+                onClick={() => setView("expenses")}
+                className={`px-2.5 py-1 text-xs font-medium rounded-sm transition-colors ${
+                  view === "expenses" ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Expenses
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={view === "income"}
+                onClick={() => setView("income")}
+                className={`px-2.5 py-1 text-xs font-medium rounded-sm transition-colors ${
+                  view === "income" ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Income
+              </button>
+            </div>
+            {view === "expenses" && categoryFilter && (
               <button
                 onClick={() => setCategoryFilter(null)}
                 className="h-6 px-2 text-xs inline-flex items-center gap-1 rounded-full border border-foreground/30 bg-muted text-foreground shrink-0"
@@ -658,7 +690,7 @@ export default function ExpenseTable({ expenses, className = "", token, username
                 <span className="text-muted-foreground">✕</span>
               </button>
             )}
-            {userFilter && (
+            {view === "expenses" && userFilter && (
               <button
                 onClick={() => setUserFilter(null)}
                 className="h-6 px-2 text-xs inline-flex items-center gap-1 rounded-full border border-foreground/30 bg-muted text-foreground shrink-0"
@@ -669,57 +701,59 @@ export default function ExpenseTable({ expenses, className = "", token, username
             )}
           </div>
           <span className="text-xs text-muted-foreground shrink-0">
-            Total: <span className="font-semibold text-foreground">${animatedTotal.toFixed(2)}</span>
+            Total: <span className="font-semibold text-foreground">${displayTotal.toFixed(2)}</span>
           </span>
         </div>
 
-        <div className="flex items-center gap-2">
-          <Select value={selectedMonth} onValueChange={setSelectedMonthOverride}>
-            <SelectTrigger className="h-8 text-xs w-28 md:w-32 shrink-0"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All time</SelectItem>
-              {months.map((m) => <SelectItem key={m} value={m}>{formatMonth(m)}</SelectItem>)}
-            </SelectContent>
-          </Select>
+        {view === "expenses" && (
+          <div className="flex items-center gap-2">
+            <Select value={selectedMonth} onValueChange={setSelectedMonthOverride}>
+              <SelectTrigger className="h-8 text-xs w-28 md:w-32 shrink-0"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All time</SelectItem>
+                {months.map((m) => <SelectItem key={m} value={m}>{formatMonth(m)}</SelectItem>)}
+              </SelectContent>
+            </Select>
 
-          <button
-            onClick={() => setFlaggedOnly((f) => !f)}
-            title="Flagged only"
-            aria-label="Flagged only"
-            aria-pressed={flaggedOnly}
-            className={`shrink-0 h-8 w-8 flex items-center justify-center rounded-md border transition-colors ${
-              flaggedOnly
-                ? "border-amber-400 bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-700"
-                : "border-border text-muted-foreground hover:bg-muted"
-            }`}
-          >
-            <Flag className="w-3.5 h-3.5" fill={flaggedOnly ? "currentColor" : "none"} />
-          </button>
+            <button
+              onClick={() => setFlaggedOnly((f) => !f)}
+              title="Flagged only"
+              aria-label="Flagged only"
+              aria-pressed={flaggedOnly}
+              className={`shrink-0 h-8 w-8 flex items-center justify-center rounded-md border transition-colors ${
+                flaggedOnly
+                  ? "border-amber-400 bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-700"
+                  : "border-border text-muted-foreground hover:bg-muted"
+              }`}
+            >
+              <Flag className="w-3.5 h-3.5" fill={flaggedOnly ? "currentColor" : "none"} />
+            </button>
 
-          <div className="relative flex-1 min-w-0">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
-            <Input
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search…"
-              className="h-8 text-sm pl-7 pr-7"
-            />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => setSearchQuery("")}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
+            <div className="relative flex-1 min-w-0">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+              <Input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search…"
+                className="h-8 text-sm pl-7 pr-7"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* New activity since you left — household awareness, derived purely
           from data already fetched via /expenses (no new endpoint/infra). */}
-      {newFromOthers.length > 0 && (
+      {view === "expenses" && newFromOthers.length > 0 && (
         <div className="mx-4 mt-3 md:mx-5 shrink-0 rounded-xl border border-border bg-muted/40 px-3 py-2 flex items-center gap-2">
           <span className="flex-1 text-xs text-foreground">
             <span className="font-semibold">{newFromOthers.length}</span> new expense{newFromOthers.length !== 1 ? "s" : ""} from{" "}
@@ -740,7 +774,7 @@ export default function ExpenseTable({ expenses, className = "", token, username
       <div ref={listRef} onScroll={handleListScroll} className="h-full overflow-y-auto overscroll-contain">
 
         {/* ── Category breakdown ── */}
-        {breakdown.length > 0 && (
+        {view === "expenses" && breakdown.length > 0 && (
           <div className="px-4 py-3 md:px-5 border-b border-border/50">
             <div className="flex items-center justify-between mb-2">
               <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Breakdown</div>
@@ -780,7 +814,7 @@ export default function ExpenseTable({ expenses, className = "", token, username
         )}
 
         {/* ── Recurring charges ── */}
-        {recurring.length > 0 && (
+        {view === "expenses" && recurring.length > 0 && (
           <div className={`px-4 py-3 md:px-5 border-b border-border/50 ${searchQuery ? "hidden md:block" : ""}`}>
             <button
               type="button"
@@ -813,7 +847,7 @@ export default function ExpenseTable({ expenses, className = "", token, username
         )}
 
         {/* ── Mobile card list ── */}
-        <div className="md:hidden">
+        {view === "expenses" && <div className="md:hidden">
           {loading ? (
             <ExpenseSkeleton />
           ) : filtered.length === 0 ? (
@@ -855,10 +889,10 @@ export default function ExpenseTable({ expenses, className = "", token, username
               ))}
             </div>
           ))}
-        </div>
+        </div>}
 
         {/* ── Desktop table ── */}
-        <table className="w-full text-sm border-collapse hidden md:table">
+        {view === "expenses" && <table className="w-full text-sm border-collapse hidden md:table">
           <thead className="sticky top-0 bg-background z-10">
             <tr className="border-b border-border">
               <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wide w-16">Date</th>
@@ -911,7 +945,56 @@ export default function ExpenseTable({ expenses, className = "", token, username
               </tr>
             ))}
           </tbody>
-        </table>
+        </table>}
+
+        {/* ── Income mobile card list — read-only Phase 1, no swipe/edit/delete ── */}
+        {view === "income" && <div className="md:hidden">
+          {income.length === 0 ? (
+            <p className="text-center py-16 text-muted-foreground text-sm">No income yet</p>
+          ) : income.reduce((groups, i) => {
+            const last = groups[groups.length - 1];
+            if (!last || last.date !== i.date) groups.push({ date: i.date, items: [i] });
+            else last.items.push(i);
+            return groups;
+          }, []).map(({ date, items }) => (
+            <div key={date}>
+              <div className="px-4 py-1.5 bg-muted/60 sticky top-0 z-10 border-b border-border/50">
+                <span className="text-xs font-medium text-muted-foreground">{formatSectionDate(date)}</span>
+              </div>
+              {items.map((i) => (
+                <div key={i.id} className="flex items-center gap-3 px-4 py-3 border-b border-border/50">
+                  <CategoryBadge category={i.category} small />
+                  <span className="flex-1 text-sm font-medium text-foreground truncate">{i.description}</span>
+                  <span className="text-sm font-semibold text-foreground tabular-nums shrink-0">${i.amount.toFixed(2)}</span>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>}
+
+        {/* ── Income desktop table — read-only Phase 1, no edit/delete ── */}
+        {view === "income" && <table className="w-full text-sm border-collapse hidden md:table">
+          <thead className="sticky top-0 bg-background z-10">
+            <tr className="border-b border-border">
+              <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wide w-16">Date</th>
+              <th className="text-left px-3 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wide">Description</th>
+              <th className="text-left px-3 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wide w-28">Category</th>
+              <th className="text-right px-3 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wide w-20">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {income.length === 0 ? (
+              <tr><td colSpan={4} className="text-center py-16 text-muted-foreground text-sm">No income yet</td></tr>
+            ) : income.map((i) => (
+              <tr key={i.id} className="border-b border-border/50">
+                <td className="px-4 py-3 text-xs text-muted-foreground tabular-nums whitespace-nowrap">{formatDate(i.date)}</td>
+                <td className="px-3 py-3 text-sm text-foreground">{i.description}</td>
+                <td className="px-3 py-3"><CategoryBadge category={i.category} /></td>
+                <td className="px-3 py-3 text-right text-sm font-medium text-foreground tabular-nums">${i.amount.toFixed(2)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>}
 
       </div>
       {showScrollToTop && (
