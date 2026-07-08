@@ -15,6 +15,7 @@ export default defineConfig({
       '/auth': 'http://localhost:8000',
       '/chat': 'http://localhost:8000',
       '/expenses': 'http://localhost:8000',
+      '/income': 'http://localhost:8000',
       '/categories': 'http://localhost:8000',
       '/budgets': 'http://localhost:8000',
       '/insights': 'http://localhost:8000',

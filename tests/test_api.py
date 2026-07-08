@@ -18,6 +18,10 @@ def add_expense(user_id, amount, category, description, day):
     return db.save_expense(amount, category, description, day, user_id=user_id)
 
 
+def add_income(user_id, amount, category, description, day):
+    return db.save_income(amount, category, description, day, user_id=user_id)
+
+
 # --- /auth/login ------------------------------------------------------------
 
 def test_login_succeeds_with_correct_password():
@@ -83,6 +87,27 @@ def test_expenses_endpoint_returns_data_when_authenticated(auth_headers, user_id
 
     assert response.status_code == 200
     assert len(response.json()) == 1
+
+
+# --- income ------------------------------------------------------------
+
+def test_income_endpoint_requires_auth():
+    assert client.get("/income").status_code == 401  # no Authorization header at all
+
+
+def test_income_endpoint_rejects_invalid_token():
+    response = client.get("/income", headers={"Authorization": "Bearer not-a-valid-jwt"})
+    assert response.status_code == 401
+
+
+def test_income_endpoint_returns_data_when_authenticated(auth_headers, user_id):
+    add_income(user_id, 2500, "Salary", "Payroll Deposit", "2026-06-01")
+
+    response = client.get("/income", headers=auth_headers)
+
+    assert response.status_code == 200
+    assert len(response.json()) == 1
+    assert response.json()[0]["category"] == "Salary"
 
 
 # --- budgets ---------------------------------------------------------------

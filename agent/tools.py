@@ -1,4 +1,4 @@
-from agent.categories import CATEGORIES
+from agent.categories import CATEGORIES, INCOME_CATEGORIES
 from agent.db import (
     delete_budget,
     delete_expense,
@@ -7,6 +7,7 @@ from agent.db import (
     get_budget_status,
     get_category_breakdown,
     get_expenses,
+    get_income,
     get_monthly_trend,
     get_recurring_expenses,
     get_run_rate,
@@ -16,11 +17,13 @@ from agent.db import (
     get_weekly_pace,
     get_yoy_comparison,
     save_expense,
+    save_income,
     set_budget,
     update_expense,
 )
 
 _category_enum = {"type": "string", "enum": CATEGORIES}
+_income_category_enum = {"type": "string", "enum": INCOME_CATEGORIES}
 
 TOOL_DEFINITIONS = [
     {
@@ -32,6 +35,20 @@ TOOL_DEFINITIONS = [
                 "amount":      {"type": "number", "description": "Amount in dollars"},
                 "category":   {**_category_enum, "description": "Expense category"},
                 "description": {"type": "string", "description": "Short description of the expense"},
+                "date":        {"type": "string", "description": "ISO date, e.g. 2025-01-13"},
+            },
+            "required": ["amount", "category", "description", "date"],
+        },
+    },
+    {
+        "name": "save_income",
+        "description": "Save a parsed income entry to the database",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "amount":      {"type": "number", "description": "Amount in dollars"},
+                "category":   {**_income_category_enum, "description": "Income category"},
+                "description": {"type": "string", "description": "Short description of the income"},
                 "date":        {"type": "string", "description": "ISO date, e.g. 2025-01-13"},
             },
             "required": ["amount", "category", "description", "date"],
@@ -62,6 +79,23 @@ TOOL_DEFINITIONS = [
                 "max_amount": {"type": "number", "description": "Only include expenses with amount <= this value"},
                 "flagged":    {"type": "boolean", "description": "Filter to only flagged (true) or only unflagged (false) expenses"},
                 "description_contains": {"type": "string", "description": "Filter to expenses whose description contains this text (case-insensitive substring match) — use for vendor/text lookups like 'what did I spend at Costco'"},
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "get_income",
+        "description": "Query income entries from the database. Use this to answer questions about income received.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "start_date": {"type": "string", "description": "Filter from this ISO date (inclusive)"},
+                "end_date":   {"type": "string", "description": "Filter to this ISO date (inclusive)"},
+                "category":   {"type": "string", "description": "Filter by category name"},
+                "logged_by":  {"type": "string", "description": "Filter by the username who logged the income"},
+                "min_amount": {"type": "number", "description": "Only include income with amount >= this value"},
+                "max_amount": {"type": "number", "description": "Only include income with amount <= this value"},
+                "description_contains": {"type": "string", "description": "Filter to income entries whose description contains this text (case-insensitive substring match)"},
             },
             "required": [],
         },
@@ -263,8 +297,10 @@ TOOL_DEFINITIONS = [
 
 TOOL_HANDLERS = {
     "save_expense":           save_expense,
+    "save_income":            save_income,
     "find_similar_expense":   find_similar_expenses,
     "get_expenses":           get_expenses,
+    "get_income":             get_income,
     "get_category_breakdown": get_category_breakdown,
     "get_monthly_trend":      get_monthly_trend,
     "get_recurring_expenses": get_recurring_expenses,

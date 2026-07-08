@@ -511,6 +511,87 @@ def test_get_expenses_description_contains_no_match_returns_empty(user_id):
     assert db.get_expenses(description_contains="nonexistent vendor") == []
 
 
+# --- save_income / get_income --------------------------------------------
+
+def add_income(user_id, amount, category, description, day):
+    return db.save_income(amount, category, description, day, user_id=user_id)
+
+
+def test_save_income_basic(user_id):
+    result = add_income(user_id, 2500, "Salary", "Payroll Deposit", "2026-06-10")
+    assert result["status"] == "saved"
+
+    income = db.get_income()
+    assert len(income) == 1
+    assert income[0]["amount"] == 2500.0
+    assert income[0]["category"] == "Salary"
+    assert income[0]["description"] == "Payroll Deposit"
+    assert income[0]["logged_by"] == "testuser"
+
+
+def test_save_income_capitalizes_description(user_id):
+    add_income(user_id, 40, "Reimbursement", "reimbursement from jake", "2026-06-10")
+    assert db.get_income()[0]["description"] == "Reimbursement from jake"
+
+
+def test_get_income_filters_by_category(user_id):
+    add_income(user_id, 2500, "Salary", "Payroll", "2026-06-01")
+    add_income(user_id, 40, "Gift", "Birthday gift", "2026-06-01")
+
+    result = db.get_income(category="salary")  # case-insensitive
+    assert len(result) == 1
+    assert result[0]["category"] == "Salary"
+
+
+def test_get_income_filters_by_logged_by(user_id):
+    db.create_user("alice", "hash")
+    alice_id = db.get_user_by_username("alice")["id"]
+    add_income(user_id, 100, "Gift", "Mine", "2026-06-01")
+    add_income(alice_id, 200, "Gift", "Alice's", "2026-06-01")
+
+    result = db.get_income(logged_by="ALICE")  # case-insensitive
+    assert len(result) == 1
+    assert result[0]["description"] == "Alice's"
+
+
+def test_get_income_filters_by_amount_range(user_id):
+    add_income(user_id, 5, "Gift", "Small", "2026-06-01")
+    add_income(user_id, 50, "Gift", "Medium", "2026-06-01")
+    add_income(user_id, 500, "Gift", "Big", "2026-06-01")
+
+    result = db.get_income(min_amount=10, max_amount=100)
+    assert [r["description"] for r in result] == ["Medium"]
+
+
+def test_get_income_filters_by_date_range(user_id):
+    add_income(user_id, 10, "Gift", "In range", "2026-06-15")
+    add_income(user_id, 20, "Gift", "Out of range", "2026-07-01")
+
+    result = db.get_income(start_date="2026-06-01", end_date="2026-06-30")
+    assert [r["description"] for r in result] == ["In range"]
+
+
+def test_get_income_description_contains_matches_substring(user_id):
+    add_income(user_id, 10, "Rebate", "Cashback from Amex", "2026-06-01")
+    add_income(user_id, 20, "Gift", "Birthday gift", "2026-06-02")
+
+    result = db.get_income(description_contains="amex")
+    assert len(result) == 1
+    assert result[0]["description"] == "Cashback from Amex"
+
+
+def test_get_income_ordered_by_date_desc(user_id):
+    add_income(user_id, 10, "Gift", "Earlier", "2026-06-01")
+    add_income(user_id, 20, "Gift", "Later", "2026-06-05")
+
+    result = db.get_income()
+    assert [r["description"] for r in result] == ["Later", "Earlier"]
+
+
+def test_get_income_empty_returns_empty_list():
+    assert db.get_income() == []
+
+
 # --- get_average_transaction --------------------------------------------
 
 def test_average_transaction_for_category(user_id):

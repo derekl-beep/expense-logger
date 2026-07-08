@@ -21,6 +21,7 @@ from agent.db import (
     get_budget_status,
     get_budgets,
     get_expenses,
+    get_income,
     get_recurring_expenses,
     get_user_by_username,
     increment_api_call_count,
@@ -120,6 +121,11 @@ def health():
 @app.get("/expenses")
 def expenses_endpoint(user_id: int = Depends(get_current_user)):
     return get_expenses()
+
+
+@app.get("/income")
+def income_endpoint(user_id: int = Depends(get_current_user)):
+    return get_income()
 
 
 @app.get("/categories")

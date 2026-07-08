@@ -4,7 +4,7 @@ from datetime import date
 import anthropic
 from dotenv import load_dotenv
 
-from agent.categories import CATEGORY_HINTS
+from agent.categories import CATEGORY_HINTS, INCOME_CATEGORY_HINTS
 from agent.tools import TOOL_DEFINITIONS, TOOL_HANDLERS
 
 load_dotenv()
@@ -25,6 +25,11 @@ If save_expense returns possible_duplicate_of, it has already flagged both the n
 ### Choosing a category
 For every expense, call find_similar_expense with its description (or vendor name) before deciding on a category — do this even if you're already confident what the category should be, since the user may have categorized this vendor differently than you'd assume. If it returns a match with a high score (roughly 0.35+), reuse that match's category directly. If it returns nothing useful, fall back to your own knowledge of the vendor (e.g. you know "Tims" means Tim Hortons, a coffee shop) to pick the best category. Only ask the user if you genuinely cannot infer a category either way.
 
+## Logging income
+When the user describes money they received, or when parsing pasted bank/transaction text, credit/deposit lines should be classified as income (call save_income) rather than expense — never call save_expense for money coming in. Use the same date resolution rules and the same title-case "[What] at [Venue]"-style description convention as expenses.
+For example: a line like "Jul 5  Payroll Deposit  +2,500.00" is a credit, so call save_income with category Salary and a description like "Payroll Deposit". A line like "Jul 6  E-Transfer from Jake  +40.00" — if it matches an expense you can find already logged (e.g. call get_expenses to check for a same-amount-range dinner/shared cost with Jake), use category Reimbursement and a description like "Reimbursement from Jake". If it doesn't match anything already logged (e.g. a roommate's bill share you never logged as your own expense, or you can't find a matching expense), use category Transfer instead — don't guess Reimbursement without a logged expense to point to.
+{income_category_hints}
+
 ## Querying expenses
 For category/date-range summaries (e.g. "summarize this month", "breakdown by category"), call get_category_breakdown and report its numbers exactly as returned — never tally amounts yourself from get_expenses rows, that's unreliable over more than a couple of items.
 For spending trends across multiple months (e.g. "has my dining spending gone up"), call get_monthly_trend.
@@ -37,6 +42,7 @@ For day-of-week spending pattern questions, call get_weekday_pattern.
 For anything else — finding a specific expense, listing recent transactions, lookups before an update/delete — call get_expenses with appropriate filters. Use logged_by to filter by who logged the expense (e.g. "derek" or "kelly"), min_amount/max_amount for amount-range questions (e.g. "expenses over $100"), flagged to list everything still flagged for review, and description_contains for vendor/text lookups (e.g. "what did I spend at Costco").
 For "what's my average X" / "how much do I typically spend on X" questions, call get_average_transaction and report its average exactly as returned — don't average raw rows yourself.
 Present results clearly with a total where useful.
+For questions about income received (e.g. "how much did I get paid this month", "show my income"), call get_income with appropriate filters.
 
 ## Budgets
 For budget questions (e.g. "am I over budget", "how much do I have left for groceries"), call get_budget_status. Only categories with a budget configured are returned — if a category isn't in the result, tell the user it has no budget set rather than guessing a limit.
@@ -47,13 +53,14 @@ save_expense returns the new expense's id. If you need to immediately update the
 For all other edits and flags, call get_expenses to find the right record first, then call update_expense.
 If the user refers to "the last one", "that expense", or similar, call get_expenses (no filters, most recent first) to identify it by context.
 Flagging marks an expense for follow-up (flagged=true). Unflagging clears it (flagged=false).
+update_expense and delete_expense only ever operate on expenses. Income entries can't be edited or deleted yet — expense ids and income ids are separate sequences that can collide, so never call update_expense/delete_expense with an id you got from get_income or save_income. If the user asks to edit or delete an income entry, tell them that isn't supported yet instead of guessing.
 
 ## Receipt / screenshot scanning
 When the user's message contains extracted text from one or more images (prefixed with "[Extracted text from image...]"), parse each block for expense line items. Read dates and amounts exactly as shown — do not approximate. For category, use your best judgement.
-When multiple images are attached, the same transaction can appear in more than one block — this happens when someone screenshots overlapping date ranges of the same account. Before calling save_expense, compare line items across all the blocks in this message; if two entries share the same date, amount, and description, treat them as the same transaction and save it only once.
+When multiple images are attached, the same transaction can appear in more than one block — this happens when someone screenshots overlapping date ranges of the same account. Before calling save_expense or save_income, compare line items across all the blocks in this message; if two entries (expense or income) share the same date, amount, and description, treat them as the same transaction and save it only once. This applies just as much to pasted bank/transaction text as to screenshots — check for overlap within a single pasted statement too.
 
 ## Deleting
-To delete, first call get_expenses to find the ID, then call delete_expense.
+To delete, first call get_expenses to find the ID, then call delete_expense. This only applies to expenses (see above).
 
 {category_hints}"""
 
@@ -72,10 +79,12 @@ MAX_IMAGES = 6
 # Friendly status labels shown in the UI while a tool call is in flight.
 TOOL_STATUS_LABELS = {
     "save_expense": "Saving expense…",
+    "save_income": "Saving income…",
     "find_similar_expense": "Checking vendor history…",
     "update_expense": "Updating expense…",
     "delete_expense": "Deleting expense…",
     "get_expenses": "Looking up expenses…",
+    "get_income": "Looking up income…",
     "get_category_breakdown": "Calculating breakdown…",
     "get_monthly_trend": "Analyzing spending trend…",
     "get_run_rate": "Projecting month-end total…",
@@ -132,7 +141,7 @@ def _run_tools(response_content: list, user_id: int, on_result=None) -> list:
     for block in response_content:
         if block.type == "tool_use":
             kwargs = dict(block.input)
-            if block.name == "save_expense":
+            if block.name in ("save_expense", "save_income"):
                 kwargs["user_id"] = user_id
             result = TOOL_HANDLERS[block.name](**kwargs)
             print(f"[tool] {block.name}({kwargs}) -> {result}")
@@ -161,7 +170,12 @@ def chat(user_input: str, user_id: int, username: str = "user", images: list[dic
             model=MODEL_DEFAULT,
             max_tokens=2048,
             timeout=API_TIMEOUT,
-            system=SYSTEM.format(today=date.today().isoformat(), username=username, category_hints=CATEGORY_HINTS),
+            system=SYSTEM.format(
+                today=date.today().isoformat(),
+                username=username,
+                category_hints=CATEGORY_HINTS,
+                income_category_hints=INCOME_CATEGORY_HINTS,
+            ),
             tools=TOOL_DEFINITIONS,
             messages=messages[-HISTORY_LIMIT:],
         )
@@ -192,7 +206,12 @@ def stream_chat(user_input: str, user_id: int, username: str = "user", images: l
             model=MODEL_DEFAULT,
             max_tokens=2048,
             timeout=API_TIMEOUT,
-            system=SYSTEM.format(today=date.today().isoformat(), username=username, category_hints=CATEGORY_HINTS),
+            system=SYSTEM.format(
+                today=date.today().isoformat(),
+                username=username,
+                category_hints=CATEGORY_HINTS,
+                income_category_hints=INCOME_CATEGORY_HINTS,
+            ),
             tools=TOOL_DEFINITIONS,
             messages=messages[-HISTORY_LIMIT:],
         ) as stream:
