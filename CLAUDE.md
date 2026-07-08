@@ -1,53 +1,84 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guidance for Claude Code in this repo. This file is a minimal index — detailed rules
+live in `docs/claude/` and are **binding**. Read the one that matches your task before
+starting:
+
+| You are about to… | Read first |
+|---|---|
+| Explore, search, or research anything larger than ~3 files | `docs/claude/ORCHESTRATION.md` |
+| Decide if work is done / whether to ask the user / whether to change approach | `docs/claude/JUDGMENT.md` |
+| Delegate to a subagent | `docs/claude/ORCHESTRATION.md` (rules), then `docs/claude/TEMPLATES.md` (prompt skeleton) |
+| Edit any file in `docs/claude/` or memory | `docs/claude/MAINTENANCE.md` |
+| Start a session cold with no context | `docs/claude/LETTER.md` |
+
+## Paired invariants (breaking one of these is the #1 bug source here)
+
+1. `agent/tools.py`: `TOOL_DEFINITIONS` (JSON schemas) and `TOOL_HANDLERS` (functions)
+   must change **together**. After editing either, confirm the handler signature accepts
+   every schema property, then run `uv run pytest tests/`.
+2. `agent/categories.py`: `CATEGORIES` and `CATEGORY_HINTS` must change together.
+   Categories are a closed list — never add one anywhere else.
+3. Agent **behavior** (date resolution, description format `"[What] at [Venue]"` in
+   title case, flagging semantics, query-before-update/delete) lives in the `SYSTEM`
+   prompt template in `agent/main.py`, **not in Python logic**. To change behavior,
+   edit the prompt text. Read it before assuming code is the right layer.
+4. Money: `NUMERIC(10,2)` in Postgres, converted to `float` on read in `_row()`
+   (`agent/db.py`). Keep that conversion when adding read paths.
 
 ## Commands
 
-Backend (run from repo root):
+Backend (repo root):
 ```bash
 uv sync                                   # install/sync Python deps
-uv run uvicorn api.server:app --reload    # run API on :8000
-uv run python -m agent.main               # run agent loop in terminal (no API/auth)
-uv run python scripts/seed_users.py       # create user accounts (edit USERNAMES in the script first)
+uv run uvicorn api.server:app --reload    # API on :8000
+uv run python -m agent.main               # agent loop in terminal (no API/auth)
+uv run python scripts/seed_users.py       # create user accounts (edit USERNAMES first)
 ```
 
-Frontend (run from `frontend/`):
+Frontend (from `frontend/`):
 ```bash
 npm install
 npm run dev       # Vite dev server on :5173
 npm run build     # production build -> frontend/dist (served by FastAPI)
-npm run lint       # eslint
+npm run lint
 ```
 
-Tests:
+Tests — the definition of "done" per change type is in `docs/claude/JUDGMENT.md`:
 ```bash
-uv run pytest tests/                          # backend unit tests (agent/db.py), from repo root
-cd frontend && npm run test:e2e               # Playwright e2e suite (login, breakdown, budgets)
-cd frontend && npx playwright test e2e/login.spec.js   # run a single e2e spec file
+uv run pytest tests/                                   # backend unit tests, repo root
+cd frontend && npm run test:e2e                        # full Playwright e2e suite
+cd frontend && npx playwright test e2e/login.spec.js   # single e2e spec
 ```
-Backend tests run against `expense_logger_test` (set via `DATABASE_URL`, defaults to `postgresql://postgres:postgres@localhost:5432/expense_logger_test` — see `tests/conftest.py`), truncated and reseeded per-test via an autouse fixture. The e2e suite's Playwright config auto-starts both servers and seeds the same test database from `scripts/seed_e2e_data.py` (deterministic, idempotent — see that file for the fixed login/categories/budgets it sets up). Both are isolated from the real dev `expense_logger` database.
+Backend tests use `expense_logger_test` (see `tests/conftest.py`), truncated/reseeded
+per test. The e2e Playwright config auto-starts both servers and seeds that same test
+DB from `scripts/seed_e2e_data.py` (deterministic, idempotent). Both are isolated from
+the dev `expense_logger` DB. The e2e suite is expensive — run only affected spec files
+unless the change touches auth, routing, or the chat stream.
 
-## Architecture
+## Architecture (orientation only — verify in code before relying on details)
 
-This is a single-agent, tool-calling expense tracker. The core loop lives in `agent/main.py` and is consumed by `api/server.py`; there is no business logic in the API layer beyond auth/rate-limiting and translating HTTP <-> agent calls.
+Single-agent, tool-calling expense tracker. No business logic in the API layer beyond
+auth/rate-limiting.
 
-**Request flow:** React chat UI -> `POST /chat/stream` (SSE) -> `stream_chat()` in `agent/main.py` -> Claude (`claude-haiku-4-5`) decides to call a tool -> handler in `agent/tools.py` -> `agent/db.py` (psycopg2, raw SQL) -> result fed back to Claude -> streamed text back to the client.
+**Request flow:** React chat UI → `POST /chat/stream` (SSE) → `stream_chat()` in
+`agent/main.py` → Claude calls tools → handlers in `agent/tools.py` → `agent/db.py`
+(psycopg2, raw SQL) → result back to Claude → streamed to client. Two models are in
+play (`agent/main.py`): text chat uses `MODEL_DEFAULT` (`claude-haiku-4-5-...`);
+receipt-photo OCR uses `MODEL_VISION` (`claude-sonnet-4-6`, better at reading text in
+images) via `_ocr_image()`. Don't assume prompt/behavior constraints from one model
+apply to the other.
 
-**Tool calling contract:** `agent/tools.py` defines `TOOL_DEFINITIONS` (JSON schemas Claude sees) and `TOOL_HANDLERS` (name -> Python function, all from `agent/db.py`). These two must stay in sync — adding/changing a tool means updating both the schema and ensuring the handler signature accepts matching kwargs. `category` fields are constrained via JSON schema `enum` from `agent/categories.py` (`CATEGORIES`), so the model can't invent categories.
-
-**Agent loop pattern (`agent/main.py`):** Both `chat()` and `stream_chat()` run the same loop — send messages, check `stop_reason`. `tool_use` triggers `_run_tools()` then loops again with appended tool results; `end_turn` returns/breaks. `save_expense` is special-cased in `_run_tools` to inject `user_id` (Claude never sees or sets this). The system prompt is rebuilt per-call from a template (`SYSTEM`) interpolating `today`, `username`, and `CATEGORY_HINTS` — it encodes the actual business rules (date resolution, description formatting, when to query before updating/deleting, flagging semantics). Read it before changing agent behavior; most "logic" lives in prompt text, not Python.
-
-**Session state:** `_sessions` is an in-process dict keyed by `user_id`, holding full conversation history. This is process-local — it does not survive restarts and won't work across multiple server instances.
-
-**Database (`agent/db.py`):** Single lazy global connection (`_conn`), autocommit on, raw SQL via psycopg2 with `RealDictCursor`. Schema migrations are just idempotent `CREATE TABLE IF NOT EXISTS` / `ALTER TABLE ADD COLUMN IF NOT EXISTS` statements run at import time — there's no migration framework. `_run()` retries once on `psycopg2.InterfaceError` to handle Neon's idle-connection drops.
-
-**Auth (`api/auth.py`):** JWT bearer tokens (`HTTPBearer`), bcrypt password hashes, no refresh tokens — `remember` just changes token expiry (1 day vs 30 days). `get_current_user` is the FastAPI dependency used everywhere; `check_rate_limit` in `api/server.py` wraps it to additionally enforce `DAILY_CALL_LIMIT` (tracked in the `api_calls` table) before any Claude call.
-
-**Static serving:** `api/server.py` mounts `frontend/dist` and falls back to `index.html` for any unmatched path (SPA routing), but only if that directory exists — so in dev, run the Vite server separately rather than expecting FastAPI to serve the frontend.
-
-## Conventions
-
-- Expense descriptions: concise noun phrases in title case, pattern `"[What] at [Venue]"` when there's a place. This rule lives in the system prompt (`agent/main.py`), not enforced in code.
-- Categories are a fixed, closed list (`agent/categories.py`) — don't add ad-hoc categories in code or prompts; extend `CATEGORIES` and `CATEGORY_HINTS` together.
-- Money is stored as `NUMERIC(10,2)` in Postgres and converted to `float` on read (`_row()` in `agent/db.py`) for JSON serialization.
+- **Agent loop** (`agent/main.py`): `chat()` and `stream_chat()` share the loop —
+  `tool_use` → `_run_tools()` → loop; `end_turn` → return. `save_expense` is
+  special-cased to inject `user_id` (Claude never sees it).
+- **Sessions:** `_sessions` dict in-process, keyed by `user_id`. Not restart-safe,
+  not multi-instance-safe.
+- **DB** (`agent/db.py`): single lazy global connection, autocommit, `RealDictCursor`.
+  Migrations are idempotent `CREATE/ALTER ... IF NOT EXISTS` at import time — no
+  framework. `_run()` retries once on `InterfaceError` (Neon idle drops).
+- **Auth** (`api/auth.py`): JWT bearer + bcrypt; `remember` only changes expiry
+  (1 vs 30 days). `check_rate_limit` in `api/server.py` enforces `DAILY_CALL_LIMIT`
+  before any Claude call.
+- **Static:** FastAPI serves `frontend/dist` with SPA fallback only if it exists —
+  in dev, run Vite separately.
