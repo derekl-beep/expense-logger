@@ -51,7 +51,7 @@ def _ensure_database_exists():
 
 _ensure_database_exists()
 
-from agent.db import _run, create_user, save_expense, set_budget  # noqa: E402
+from agent.db import _run, create_user, save_expense, save_income, set_budget  # noqa: E402
 
 
 def _today_minus(days: int) -> str:
@@ -65,7 +65,7 @@ def _today_minus(days: int) -> str:
 
 
 def seed():
-    _run("TRUNCATE expenses, budgets, users, api_calls RESTART IDENTITY CASCADE")
+    _run("TRUNCATE expenses, income, budgets, users, api_calls RESTART IDENTITY CASCADE")
 
     create_user(E2E_USERNAME, bcrypt.hashpw(E2E_PASSWORD.encode(), bcrypt.gensalt()).decode())
     cur = _run("SELECT id FROM users WHERE username = %s", (E2E_USERNAME,))
@@ -97,6 +97,15 @@ def seed():
     ]
     for amount, category, description, day in expenses:
         save_expense(amount, category, description, day, user_id=user_id)
+
+    # Income: kept small and distinct from every expense description so e2e
+    # assertions can't accidentally match the wrong list.
+    income = [
+        (2500.00, "Salary", "Payroll Deposit", _today_minus(15)),
+        (42.75, "Rebate", "Cashback Reward", _today_minus(5)),
+    ]
+    for amount, category, description, day in income:
+        save_income(amount, category, description, day, user_id=user_id)
 
     create_user(E2E_HOUSEMATE_USERNAME, bcrypt.hashpw(E2E_HOUSEMATE_PASSWORD.encode(), bcrypt.gensalt()).decode())
     cur = _run("SELECT id FROM users WHERE username = %s", (E2E_HOUSEMATE_USERNAME,))
