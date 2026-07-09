@@ -2,6 +2,7 @@ from agent.categories import CATEGORIES, INCOME_CATEGORIES
 from agent.db import (
     delete_budget,
     delete_expense,
+    delete_income,
     find_similar_expenses,
     get_average_transaction,
     get_budget_status,
@@ -21,6 +22,7 @@ from agent.db import (
     save_income,
     set_budget,
     update_expense,
+    update_income,
 )
 
 _category_enum = {"type": "string", "enum": CATEGORIES}
@@ -259,6 +261,32 @@ TOOL_DEFINITIONS = [
         },
     },
     {
+        "name": "update_income",
+        "description": "Update fields on an existing income entry by its ID. First call get_income to find the ID, or use the ID returned by save_income directly if editing immediately after saving. This never changes the entry's reimbursement link — use link_income_to_expense for that.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "id":          {"type": "integer", "description": "The income entry's ID to update"},
+                "amount":      {"type": "number",  "description": "New amount in dollars"},
+                "category":   {**_income_category_enum, "description": "New category"},
+                "description": {"type": "string",  "description": "New description"},
+                "date":        {"type": "string",  "description": "New ISO date"},
+            },
+            "required": ["id"],
+        },
+    },
+    {
+        "name": "delete_income",
+        "description": "Delete an income entry by its ID. First call get_income to find the ID.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "id": {"type": "integer", "description": "The income entry's ID to delete"},
+            },
+            "required": ["id"],
+        },
+    },
+    {
         "name": "get_average_transaction",
         "description": "Get the average transaction amount and transaction count for a category and/or date range, computed in the database. Use for 'what's my average coffee purchase' / 'how much do I typically spend on X' questions — report the average exactly as returned, don't compute it yourself from raw rows.",
         "input_schema": {
@@ -327,6 +355,8 @@ TOOL_HANDLERS = {
     "get_yoy_comparison":     get_yoy_comparison,
     "update_expense":         update_expense,
     "delete_expense":         delete_expense,
+    "update_income":          update_income,
+    "delete_income":          delete_income,
     "get_average_transaction": get_average_transaction,
     "get_budget_status":      get_budget_status,
     "set_budget":             set_budget,
