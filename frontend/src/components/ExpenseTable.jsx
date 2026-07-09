@@ -921,7 +921,7 @@ export default function ExpenseTable({ expenses, income = [], className = "", to
                 <td className="px-4 py-3 text-xs text-muted-foreground tabular-nums whitespace-nowrap">{formatDate(e.date)}</td>
                 <td className="px-3 py-3 text-sm text-foreground">
                   <span className="inline-flex items-center gap-1.5">
-                    {e.description}
+                    <span>{e.description}</span>
                     {e.reimbursed && (
                       <span title="Reimbursed" className="text-[10px] px-1.5 py-0.5 rounded-md font-medium bg-primary/10 text-primary shrink-0">
                         Reimbursed
@@ -1010,7 +1010,7 @@ export default function ExpenseTable({ expenses, income = [], className = "", to
               <tr key={i.id} className="border-b border-border/50">
                 <td className="px-4 py-3 text-xs text-muted-foreground tabular-nums whitespace-nowrap">{formatDate(i.date)}</td>
                 <td className="px-3 py-3 text-sm text-foreground">
-                  {i.description}
+                  <span>{i.description}</span>
                   {i.reimburses_expense_id && (
                     <span className="block text-xs text-muted-foreground">
                       repays {i.reimburses_expense_description} · ${i.reimburses_expense_amount.toFixed(2)}

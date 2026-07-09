@@ -107,6 +107,15 @@ def seed():
     for amount, category, description, day in income:
         save_income(amount, category, description, day, user_id=user_id)
 
+    # A reimbursed expense + its linked income row — a separate pair from the
+    # rest of the seed data so linking it never touches a description any
+    # other spec's exact-text assertion depends on.
+    reimbursed_expense = save_expense(60.00, "Dining", "Dinner at Luigi's", _today_minus(4), user_id=user_id)
+    save_income(
+        30.00, "Reimbursement", "Reimbursement from Jake", _today_minus(3),
+        user_id=user_id, reimburses_expense_id=reimbursed_expense["id"],
+    )
+
     create_user(E2E_HOUSEMATE_USERNAME, bcrypt.hashpw(E2E_HOUSEMATE_PASSWORD.encode(), bcrypt.gensalt()).decode())
     cur = _run("SELECT id FROM users WHERE username = %s", (E2E_HOUSEMATE_USERNAME,))
     housemate_id = cur.fetchone()["id"]

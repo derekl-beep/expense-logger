@@ -660,6 +660,32 @@ def test_get_expenses_reimbursed_flag(user_id):
     assert result["Lunch"] is False
 
 
+def test_link_income_to_expense_nonexistent_expense_returns_error(user_id):
+    income_id = add_income(user_id, 21, "Reimbursement", "From Jake", "2026-06-02")["id"]
+
+    result = db.link_income_to_expense(income_id, 999999)
+
+    assert result["status"] == "error"
+    assert db.get_income()[0]["reimburses_expense_id"] is None
+
+
+def test_link_income_to_expense_soft_deleted_expense_returns_error(user_id):
+    expense = add_expense(user_id, 42, "Dining", "Dinner", "2026-06-01")
+    db.delete_expense(expense["id"])
+    income_id = add_income(user_id, 21, "Reimbursement", "From Jake", "2026-06-02")["id"]
+
+    result = db.link_income_to_expense(income_id, expense["id"])
+
+    assert result["status"] == "error"
+
+
+def test_save_income_nonexistent_reimburses_expense_id_returns_error(user_id):
+    result = db.save_income(21, "Reimbursement", "From Jake", "2026-06-02", user_id=user_id, reimburses_expense_id=999999)
+
+    assert result["status"] == "error"
+    assert db.get_income() == []
+
+
 # --- get_average_transaction --------------------------------------------
 
 def test_average_transaction_for_category(user_id):

@@ -192,6 +192,11 @@ def save_income(
 ) -> dict:
     description = _capitalize_description(description)
 
+    if reimburses_expense_id is not None:
+        cur = _run("SELECT id FROM expenses WHERE id = %s AND deleted_at IS NULL", (reimburses_expense_id,))
+        if cur.fetchone() is None:
+            return {"status": "error", "message": f"No expense with id {reimburses_expense_id}"}
+
     cur = _run(
         "INSERT INTO income (amount, category, description, date, user_id, reimburses_expense_id) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
         (amount, category, description, date, user_id, reimburses_expense_id),
@@ -202,6 +207,11 @@ def save_income(
 
 def link_income_to_expense(income_id: int, expense_id: int = None) -> dict:
     """Set or clear the expense an income row is a reimbursement for. expense_id=None unlinks."""
+    if expense_id is not None:
+        cur = _run("SELECT id FROM expenses WHERE id = %s AND deleted_at IS NULL", (expense_id,))
+        if cur.fetchone() is None:
+            return {"status": "error", "message": f"No expense with id {expense_id}"}
+
     cur = _run(
         "UPDATE income SET reimburses_expense_id = %s WHERE id = %s RETURNING id",
         (expense_id, income_id),
