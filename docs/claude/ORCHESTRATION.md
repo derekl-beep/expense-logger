@@ -4,32 +4,37 @@ Binding rules for how the main conversation ("commander") uses subagents in this
 environment. Written to fix [D1] in `docs/claude/DIAGNOSIS.md`. Audience: Sonnet-class
 or weaker models running as the main session.
 
-## 1. The commander never executes bulk work directly
+## 1. Delegate only for genuinely large or parallel work
 
-The main conversation's context is the most expensive resource in the session: every
-byte read into it is re-sent on every later turn. Therefore the commander only
-**decides, delegates, edits small, and synthesizes**. It never does:
+This is a small, single-maintainer codebase. Subagent spawns are not free — each one
+re-derives context from scratch and its report still lands in the commander's
+context. Spawning for things the commander could just do directly is the #1 way a
+session burns its token budget (see `LESSONS.md` 2026-07-08). Default to doing work
+directly; delegate only when one of these is true:
 
-- **Large-scale reading** — anything beyond ~3 files or ~400 lines total → delegate
-  to an `Explore` agent (read-only, returns conclusions + `file:line`).
-- **Repository scanning** — "find where X happens", "how is Y wired" across the tree
-  → `Explore` agent. State breadth explicitly: `"medium"` or `"very thorough"`.
+- **Large-scale reading** — a scan that would pull in more than ~8 files or ~1500
+  lines total → `Explore` agent (read-only, returns conclusions + `file:line`).
+- **Repository-wide scanning** — "find every place X happens" across the whole tree,
+  where you don't already have a good guess where to look → `Explore` agent.
 - **Web research** — docs lookups, library comparisons → `general-purpose` agent
   (it has WebSearch/WebFetch). Exception: questions about Claude Code / Claude API
   itself → `claude-code-guide` agent.
-- **Bulk file editing** — mechanical changes across >3 files → `general-purpose`
-  agent with an exact spec (see `TEMPLATES.md`).
-- **Plan design for multi-file changes** → `Plan` agent.
+- **Bulk mechanical editing** — the same change repeated across many (>5) files →
+  `general-purpose` agent with an exact spec (see `TEMPLATES.md`).
+- **Independent parallel work** — two unrelated subtasks that don't share files and
+  the user asked for speed → parallel spawns.
 
-The commander MAY directly: read a single named file section it is about to edit,
-run one test command, make edits of 1–3 files it fully understands, and talk to the
-user. When in doubt, delegate.
+The commander should directly: grep/read a handful of files to orient itself, make
+edits to any number of files it understands, run tests/build, and talk to the user.
+A single targeted `Grep` + `Read` of 2-4 files to answer a specific question is
+normal, cheap, and preferred over a spawn for that same question. When a task is
+small enough to just do, do it — do not delegate by default or "to be safe."
 
 **Positive example:** "Where does the frontend decide to show the flagged badge?" →
-spawn `Explore` (breadth: medium) → get back `frontend/src/components/ExpenseTable.jsx:<line>`
-→ commander reads just that region and edits.
-**Counterexample (forbidden):** commander runs `Grep` five times, `Read`s four whole
-components, then edits one line. Those four files now bloat every remaining turn.
+`Grep` for the relevant term, `Read` the one matching file, answer directly.
+**Counterexample (forbidden):** spawning an `Explore` agent to answer a question
+`Grep` would answer in one call, or spawning a second agent to implement a change
+after already reading the relevant file yourself.
 
 ## 2. What actually exists here (verified 2026-07-07 — do not trust memory over this list)
 
@@ -97,25 +102,30 @@ subagents don't know it by default.
   (what's broken, what was tried, current hypothesis) and surface it to the user.
   Spending a third round is how sessions burn out with nothing written down.
 
-## 6. Validation is never self-validation
+## 6. Validation means running it, not spawning a second opinion
 
-The agent (or commander) that produced a change never certifies it alone:
+For routine changes, "validated" means the commander (or the implementing agent)
+actually ran the relevant command and saw it pass — not a fresh agent re-reading the
+diff. Do not spawn a validation agent by default; it's rarely worth the tokens for
+work in a single-maintainer repo.
 
-- **Files/docs written** → a fresh-context agent reads them back and answers: "is it
-  complete, internally consistent, and executable by someone with no other context?"
 - **Code changed** → acceptance = tests or actual execution (`uv run pytest tests/`,
-  targeted Playwright spec, `npm run build`), run by the commander or a fresh agent —
-  not "the diff looks right."
-- **High-risk judgment calls** (architecture, security, data migrations) → second
-  opinion: spawn a fresh `opus` agent with the question and *no* sight of the first
-  answer, then compare; or generate 2–3 candidate answers and select with stated
-  reasons.
+  targeted Playwright spec, `npm run build`), run directly. That is sufficient for
+  routine changes.
+- **Files/docs written** → re-read your own edit once and check paths/commands it
+  references actually exist. A fresh-context reader is reserved for edits to the
+  protected `docs/claude/*` rule files themselves (see `MAINTENANCE.md`), not for
+  ordinary memory or README updates.
+- **Only for genuinely high-risk judgment calls** (schema/data migrations, auth,
+  security-sensitive logic, or a change touching ≥2 of the paired invariants in
+  `CLAUDE.md`) → get a second opinion: a fresh `opus` agent with the question and
+  *no* sight of the first answer, or generate 2-3 candidates and pick with stated
+  reasons. This should be the exception, not the default.
 
-**Positive example:** after writing a migration, spawn a fresh sonnet agent:
-"Read agent/db.py:1-80. Does the new ALTER statement run idempotently on a DB that
-already has the column? Cite line numbers." **Counterexample:** the implementing
-agent replies "I have verified the migration is idempotent" with no execution and
-no fresh reader — that is a claim, not a validation.
+**Positive example:** wrote a migration → ran it against `expense_logger_test`
+directly and confirmed idempotency by running it twice. **Counterexample:** spawning
+a fresh agent to review a one-line typo fix, or claiming "verified" with no command
+run at all.
 
 ## 7. Limits (honesty clause)
 
