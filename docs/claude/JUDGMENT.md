@@ -46,8 +46,11 @@ If a box can't be checked, the work is not done — say so explicitly.
       one edge case), and the transcript excerpt is shown to the user.
 
 **Docs/memory change:**
-- [ ] A fresh-context agent read it back and confirmed it is executable without
-      other context (ORCHESTRATION.md §6).
+- [ ] Re-read your own edit once; paths/commands it names actually exist.
+- [ ] Only if editing a protected `docs/claude/*` rule file (MAINTENANCE.md's table):
+      a fresh-context agent read it back and confirmed it is executable without other
+      context (ORCHESTRATION.md §6). Not required for memory files, README, or CLAUDE.md's
+      factual sections.
 
 ✅ **Positive:** "Added `get_budget_status` tool; pytest passes (34 passed); exercised
 via terminal agent — transcript attached." ❌ **Counter:** "I've added the tool and

@@ -51,8 +51,10 @@ since it edits protected files):
 - A rule in any doc has been wrong/ignored for 3+ sessions → propose deleting it.
   Dead rules teach models to ignore the live ones.
 
-Consolidation method: spawn a fresh-context review agent (TEMPLATES.md §5) on the
-proposed new versions before showing the user.
+Consolidation method: re-read the proposed new versions yourself for contradictions
+before showing the user. Only spawn a fresh-context review agent (TEMPLATES.md §5)
+if the consolidation is large (touches most of `docs/claude/`) — not for a one- or
+two-line promotion.
 
 ## Verification of doc edits
 
