@@ -876,6 +876,11 @@ export default function ExpenseTable({ expenses, income = [], className = "", to
                       userActive={userFilter === e.logged_by}
                     />
                     <span className="flex-1 text-sm font-medium text-foreground truncate">{e.description}</span>
+                    {e.reimbursed && (
+                      <span title="Reimbursed" className="text-[10px] px-1.5 py-0.5 rounded-md font-medium bg-primary/10 text-primary shrink-0">
+                        Reimbursed
+                      </span>
+                    )}
                     <span className="text-sm font-semibold text-foreground tabular-nums shrink-0">${e.amount.toFixed(2)}</span>
                     <button
                       onClick={(ev) => toggleFlag(e, ev)}
@@ -914,7 +919,16 @@ export default function ExpenseTable({ expenses, income = [], className = "", to
                 onClick={() => openEdit(e)}
               >
                 <td className="px-4 py-3 text-xs text-muted-foreground tabular-nums whitespace-nowrap">{formatDate(e.date)}</td>
-                <td className="px-3 py-3 text-sm text-foreground">{e.description}</td>
+                <td className="px-3 py-3 text-sm text-foreground">
+                  <span className="inline-flex items-center gap-1.5">
+                    <span>{e.description}</span>
+                    {e.reimbursed && (
+                      <span title="Reimbursed" className="text-[10px] px-1.5 py-0.5 rounded-md font-medium bg-primary/10 text-primary shrink-0">
+                        Reimbursed
+                      </span>
+                    )}
+                  </span>
+                </td>
                 <td className="px-3 py-3">
                   <CategoryBadge
                     category={e.category}
@@ -964,7 +978,14 @@ export default function ExpenseTable({ expenses, income = [], className = "", to
               {items.map((i) => (
                 <div key={i.id} className="flex items-center gap-3 px-4 py-3 border-b border-border/50">
                   <CategoryBadge category={i.category} small />
-                  <span className="flex-1 text-sm font-medium text-foreground truncate">{i.description}</span>
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-sm font-medium text-foreground truncate">{i.description}</span>
+                    {i.reimburses_expense_id && (
+                      <span className="block text-xs text-muted-foreground truncate">
+                        repays {i.reimburses_expense_description} · ${i.reimburses_expense_amount.toFixed(2)}
+                      </span>
+                    )}
+                  </span>
                   <span className="text-sm font-semibold text-foreground tabular-nums shrink-0">${i.amount.toFixed(2)}</span>
                 </div>
               ))}
@@ -988,7 +1009,14 @@ export default function ExpenseTable({ expenses, income = [], className = "", to
             ) : income.map((i) => (
               <tr key={i.id} className="border-b border-border/50">
                 <td className="px-4 py-3 text-xs text-muted-foreground tabular-nums whitespace-nowrap">{formatDate(i.date)}</td>
-                <td className="px-3 py-3 text-sm text-foreground">{i.description}</td>
+                <td className="px-3 py-3 text-sm text-foreground">
+                  <span>{i.description}</span>
+                  {i.reimburses_expense_id && (
+                    <span className="block text-xs text-muted-foreground">
+                      repays {i.reimburses_expense_description} · ${i.reimburses_expense_amount.toFixed(2)}
+                    </span>
+                  )}
+                </td>
                 <td className="px-3 py-3"><CategoryBadge category={i.category} /></td>
                 <td className="px-3 py-3 text-right text-sm font-medium text-foreground tabular-nums">${i.amount.toFixed(2)}</td>
               </tr>

@@ -27,7 +27,8 @@ For every expense, call find_similar_expense with its description (or vendor nam
 
 ## Logging income
 When the user describes money they received, or when parsing pasted bank/transaction text, credit/deposit lines should be classified as income (call save_income) rather than expense — never call save_expense for money coming in. Use the same date resolution rules and the same title-case "[What] at [Venue]"-style description convention as expenses.
-For example: a line like "Jul 5  Payroll Deposit  +2,500.00" is a credit, so call save_income with category Salary and a description like "Payroll Deposit". A line like "Jul 6  E-Transfer from Jake  +40.00" — if it matches an expense you can find already logged (e.g. call get_expenses to check for a same-amount-range dinner/shared cost with Jake), use category Reimbursement and a description like "Reimbursement from Jake". If it doesn't match anything already logged (e.g. a roommate's bill share you never logged as your own expense, or you can't find a matching expense), use category Transfer instead — don't guess Reimbursement without a logged expense to point to.
+For example: a line like "Jul 5  Payroll Deposit  +2,500.00" is a credit, so call save_income with category Salary and a description like "Payroll Deposit". A line like "Jul 6  E-Transfer from Jake  +40.00" — if it matches an expense you can find already logged (e.g. call get_expenses to check for a same-amount-range dinner/shared cost with Jake), use category Reimbursement, a description like "Reimbursement from Jake", and pass that expense's id as reimburses_expense_id on save_income so it's linked. If it doesn't match anything already logged (e.g. a roommate's bill share you never logged as your own expense, or you can't find a confident single match), use category Transfer instead and omit reimburses_expense_id — don't guess a link without a specific logged expense to point to.
+If the user later says a reimbursement was for a different expense than logged, or wasn't linked but should be (e.g. "that $40 from Jake was actually for the dinner on the 4th, not the 6th"), call get_income and/or get_expenses to confirm the exact ids, then call link_income_to_expense to fix it. Pass expense_id omitted (or null) to unlink.
 {income_category_hints}
 
 ## Querying expenses
@@ -53,7 +54,7 @@ save_expense returns the new expense's id. If you need to immediately update the
 For all other edits and flags, call get_expenses to find the right record first, then call update_expense.
 If the user refers to "the last one", "that expense", or similar, call get_expenses (no filters, most recent first) to identify it by context.
 Flagging marks an expense for follow-up (flagged=true). Unflagging clears it (flagged=false).
-update_expense and delete_expense only ever operate on expenses. Income entries can't be edited or deleted yet — expense ids and income ids are separate sequences that can collide, so never call update_expense/delete_expense with an id you got from get_income or save_income. If the user asks to edit or delete an income entry, tell them that isn't supported yet instead of guessing.
+update_expense and delete_expense only ever operate on expenses. Income entries can't be edited or deleted, only relinked via link_income_to_expense (see Logging income) — expense ids and income ids are separate sequences that can collide, so never call update_expense/delete_expense with an id you got from get_income or save_income, and never call link_income_to_expense with an id you got from get_expenses or save_expense. If the user asks to edit or delete an income entry's amount/date/description, tell them that isn't supported yet instead of guessing.
 
 ## Receipt / screenshot scanning
 When the user's message contains extracted text from one or more images (prefixed with "[Extracted text from image...]"), parse each block for expense line items. Read dates and amounts exactly as shown — do not approximate. For category, use your best judgement.
@@ -85,6 +86,7 @@ TOOL_STATUS_LABELS = {
     "delete_expense": "Deleting expense…",
     "get_expenses": "Looking up expenses…",
     "get_income": "Looking up income…",
+    "link_income_to_expense": "Linking reimbursement…",
     "get_category_breakdown": "Calculating breakdown…",
     "get_monthly_trend": "Analyzing spending trend…",
     "get_run_rate": "Projecting month-end total…",

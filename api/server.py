@@ -215,7 +215,7 @@ def expenses_export(user_id: int = Depends(get_current_user)):
     rows = get_expenses()
     output = io.StringIO()
     writer = csv.DictWriter(
-        output, fieldnames=["id", "date", "description", "category", "amount", "logged_by", "flagged"]
+        output, fieldnames=["id", "date", "description", "category", "amount", "logged_by", "flagged", "reimbursed"]
     )
     writer.writeheader()
     writer.writerows(rows)

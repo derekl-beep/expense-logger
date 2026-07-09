@@ -28,3 +28,8 @@ def test_save_income_and_get_income_are_registered():
     assert "save_income" in TOOL_HANDLERS
     assert "get_income" in TOOL_HANDLERS
     assert {t["name"] for t in TOOL_DEFINITIONS} >= {"save_income", "get_income"}
+
+
+def test_link_income_to_expense_is_registered():
+    assert "link_income_to_expense" in TOOL_HANDLERS
+    assert "link_income_to_expense" in {t["name"] for t in TOOL_DEFINITIONS}

@@ -20,7 +20,7 @@ test("toggles to the Income view and lists seeded income, with the expense-only 
 
   await expect(visibleText(page, "Payroll Deposit")).toBeVisible();
   await expect(visibleText(page, "Cashback Reward")).toBeVisible();
-  await expect(page.getByText("Total: $2542.75")).toBeVisible();
+  await expect(page.getByText("Total: $2572.75")).toBeVisible();
 
   // Expense-only filter controls are hidden in the income view.
   await expect(page.getByPlaceholder("Search…")).toHaveCount(0);

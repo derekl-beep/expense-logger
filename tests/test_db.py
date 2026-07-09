@@ -592,6 +592,99 @@ def test_get_income_empty_returns_empty_list():
     assert db.get_income() == []
 
 
+# --- reimburses_expense_id / link_income_to_expense ------------------------
+
+def test_save_income_with_reimburses_expense_id(user_id):
+    expense = add_expense(user_id, 42, "Dining", "Dinner at Luigi's", "2026-06-01")
+    add_income(user_id, 21, "Reimbursement", "Reimbursement from Jake", "2026-06-02")
+    db.link_income_to_expense(db.get_income()[0]["id"], expense["id"])
+
+    result = db.get_income()[0]
+    assert result["reimburses_expense_id"] == expense["id"]
+    assert result["reimburses_expense_description"] == "Dinner at Luigi's"
+    assert result["reimburses_expense_amount"] == 42.0
+
+
+def test_save_income_reimburses_expense_id_via_save(user_id):
+    expense = add_expense(user_id, 42, "Dining", "Dinner", "2026-06-01")
+    db.save_income(21, "Reimbursement", "From Jake", "2026-06-02", user_id=user_id, reimburses_expense_id=expense["id"])
+
+    result = db.get_income()[0]
+    assert result["reimburses_expense_id"] == expense["id"]
+
+
+def test_income_without_link_has_null_reimburses_fields(user_id):
+    add_income(user_id, 2500, "Salary", "Payroll", "2026-06-01")
+    result = db.get_income()[0]
+    assert result["reimburses_expense_id"] is None
+    assert result["reimburses_expense_description"] is None
+    assert result["reimburses_expense_amount"] is None
+
+
+def test_link_income_to_expense_unlink(user_id):
+    expense = add_expense(user_id, 42, "Dining", "Dinner", "2026-06-01")
+    income_id = add_income(user_id, 21, "Reimbursement", "From Jake", "2026-06-02")["id"]
+    db.link_income_to_expense(income_id, expense["id"])
+    assert db.get_income()[0]["reimburses_expense_id"] == expense["id"]
+
+    db.link_income_to_expense(income_id, None)
+    assert db.get_income()[0]["reimburses_expense_id"] is None
+
+
+def test_link_income_to_expense_missing_income_returns_error():
+    result = db.link_income_to_expense(999999, 1)
+    assert result["status"] == "error"
+
+
+def test_get_income_shows_link_after_expense_soft_deleted(user_id):
+    expense = add_expense(user_id, 42, "Dining", "Dinner", "2026-06-01")
+    income_id = add_income(user_id, 21, "Reimbursement", "From Jake", "2026-06-02")["id"]
+    db.link_income_to_expense(income_id, expense["id"])
+
+    db.delete_expense(expense["id"])
+
+    result = db.get_income()[0]
+    assert result["reimburses_expense_id"] == expense["id"]
+    assert result["reimburses_expense_description"] == "Dinner"
+
+
+def test_get_expenses_reimbursed_flag(user_id):
+    expense = add_expense(user_id, 42, "Dining", "Dinner", "2026-06-01")
+    add_expense(user_id, 10, "Dining", "Lunch", "2026-06-02")
+    income_id = add_income(user_id, 21, "Reimbursement", "From Jake", "2026-06-02")["id"]
+    db.link_income_to_expense(income_id, expense["id"])
+
+    result = {r["description"]: r["reimbursed"] for r in db.get_expenses()}
+    assert result["Dinner"] is True
+    assert result["Lunch"] is False
+
+
+def test_link_income_to_expense_nonexistent_expense_returns_error(user_id):
+    income_id = add_income(user_id, 21, "Reimbursement", "From Jake", "2026-06-02")["id"]
+
+    result = db.link_income_to_expense(income_id, 999999)
+
+    assert result["status"] == "error"
+    assert db.get_income()[0]["reimburses_expense_id"] is None
+
+
+def test_link_income_to_expense_soft_deleted_expense_returns_error(user_id):
+    expense = add_expense(user_id, 42, "Dining", "Dinner", "2026-06-01")
+    db.delete_expense(expense["id"])
+    income_id = add_income(user_id, 21, "Reimbursement", "From Jake", "2026-06-02")["id"]
+
+    result = db.link_income_to_expense(income_id, expense["id"])
+
+    assert result["status"] == "error"
+
+
+def test_save_income_nonexistent_reimburses_expense_id_returns_error(user_id):
+    result = db.save_income(21, "Reimbursement", "From Jake", "2026-06-02", user_id=user_id, reimburses_expense_id=999999)
+
+    assert result["status"] == "error"
+    assert db.get_income() == []
+
+
 # --- get_average_transaction --------------------------------------------
 
 def test_average_transaction_for_category(user_id):

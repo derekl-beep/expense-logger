@@ -45,8 +45,9 @@ def _run(sql: str, params=None):
 def _row(r: dict) -> dict:
     """Normalize Postgres types to JSON-serializable Python types."""
     d = dict(r)
-    if "amount" in d and d["amount"] is not None:
-        d["amount"] = float(d["amount"])
+    for key, value in d.items():
+        if value is not None and (key == "amount" or key.endswith("_amount")):
+            d[key] = float(value)
     if "date" in d and d["date"] is not None:
         d["date"] = str(d["date"])
     return d
@@ -94,6 +95,8 @@ _run("""
         created_at  TIMESTAMPTZ DEFAULT NOW()
     )
 """)
+
+_run("ALTER TABLE income ADD COLUMN IF NOT EXISTS reimburses_expense_id INTEGER REFERENCES expenses(id)")
 
 _run("CREATE INDEX IF NOT EXISTS income_description_trgm_idx ON income USING gin (description gin_trgm_ops)")
 
@@ -179,15 +182,46 @@ def save_expense(amount: float, category: str, description: str, date: str, user
     return {"status": "saved", "id": row["id"]}
 
 
-def save_income(amount: float, category: str, description: str, date: str, user_id: int = None) -> dict:
+def save_income(
+    amount: float,
+    category: str,
+    description: str,
+    date: str,
+    user_id: int = None,
+    reimburses_expense_id: int = None,
+) -> dict:
     description = _capitalize_description(description)
 
+    if reimburses_expense_id is not None:
+        cur = _run("SELECT id FROM expenses WHERE id = %s AND deleted_at IS NULL", (reimburses_expense_id,))
+        if cur.fetchone() is None:
+            return {"status": "error", "message": f"No expense with id {reimburses_expense_id}"}
+
     cur = _run(
-        "INSERT INTO income (amount, category, description, date, user_id) VALUES (%s, %s, %s, %s, %s) RETURNING id",
-        (amount, category, description, date, user_id),
+        "INSERT INTO income (amount, category, description, date, user_id, reimburses_expense_id) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
+        (amount, category, description, date, user_id, reimburses_expense_id),
     )
     row = cur.fetchone()
     return {"status": "saved", "id": row["id"]}
+
+
+def link_income_to_expense(income_id: int, expense_id: int = None) -> dict:
+    """Set or clear the expense an income row is a reimbursement for. expense_id=None unlinks."""
+    if expense_id is not None:
+        cur = _run("SELECT id FROM expenses WHERE id = %s AND deleted_at IS NULL", (expense_id,))
+        if cur.fetchone() is None:
+            return {"status": "error", "message": f"No expense with id {expense_id}"}
+
+    cur = _run(
+        "UPDATE income SET reimburses_expense_id = %s WHERE id = %s RETURNING id",
+        (expense_id, income_id),
+    )
+    row = cur.fetchone()
+    if row is None:
+        return {"status": "error", "message": f"No income entry with id {income_id}"}
+    if expense_id is not None:
+        return {"status": "linked", "income_id": income_id, "expense_id": expense_id}
+    return {"status": "unlinked", "income_id": income_id}
 
 
 def find_similar_expenses(description: str, limit: int = 3) -> list[dict]:
@@ -216,7 +250,8 @@ def get_expenses(
     description_contains: str = None,
 ) -> list[dict]:
     query = """
-        SELECT e.id, e.amount, e.category, e.description, e.date, e.flagged, u.username AS logged_by
+        SELECT e.id, e.amount, e.category, e.description, e.date, e.flagged, u.username AS logged_by,
+               EXISTS (SELECT 1 FROM income i WHERE i.reimburses_expense_id = e.id) AS reimbursed
         FROM expenses e
         LEFT JOIN users u ON e.user_id = u.id
         WHERE e.deleted_at IS NULL
@@ -261,9 +296,12 @@ def get_income(
     description_contains: str = None,
 ) -> list[dict]:
     query = """
-        SELECT i.id, i.amount, i.category, i.description, i.date, u.username AS logged_by
+        SELECT i.id, i.amount, i.category, i.description, i.date, u.username AS logged_by,
+               i.reimburses_expense_id, e.description AS reimburses_expense_description,
+               e.amount AS reimburses_expense_amount
         FROM income i
         LEFT JOIN users u ON i.user_id = u.id
+        LEFT JOIN expenses e ON e.id = i.reimburses_expense_id
         WHERE 1=1
     """
     params = []
