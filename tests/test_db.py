@@ -623,8 +623,7 @@ def test_income_without_link_has_null_reimburses_fields(user_id):
 
 def test_link_income_to_expense_unlink(user_id):
     expense = add_expense(user_id, 42, "Dining", "Dinner", "2026-06-01")
-    income = add_income(user_id, 21, "Reimbursement", "From Jake", "2026-06-02")
-    income_id = db.get_income()[0]["id"]
+    income_id = add_income(user_id, 21, "Reimbursement", "From Jake", "2026-06-02")["id"]
     db.link_income_to_expense(income_id, expense["id"])
     assert db.get_income()[0]["reimburses_expense_id"] == expense["id"]
 
