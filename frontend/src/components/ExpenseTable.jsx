@@ -420,6 +420,12 @@ export default function ExpenseTable({ expenses, income = [], className = "", to
   const animatedIncomeTotal = useAnimatedNumber(incomeTotal);
   const displayTotal = view === "expenses" ? animatedTotal : animatedIncomeTotal;
 
+  // Net cash flow, all-time and unfiltered by the month/search controls (those
+  // only apply to the Expenses view's own total) — uses `items` rather than the
+  // raw `expenses` prop so an optimistic delete-with-undo is reflected instantly.
+  const netCashFlow = incomeTotal - items.reduce((sum, e) => sum + e.amount, 0);
+  const animatedNetCashFlow = useAnimatedNumber(netCashFlow);
+
   const budgetMap = useMemo(() => {
     const map = {};
     budgets.forEach((b) => { map[b.category] = b.monthly_limit; });
@@ -700,8 +706,18 @@ export default function ExpenseTable({ expenses, income = [], className = "", to
               </button>
             )}
           </div>
-          <span className="text-xs text-muted-foreground shrink-0">
-            Total: <span className="font-semibold text-foreground">${displayTotal.toFixed(2)}</span>
+          <span className="text-xs text-muted-foreground shrink-0 flex flex-col items-end gap-0.5">
+            <span>
+              Total: <span className="font-semibold text-foreground">${displayTotal.toFixed(2)}</span>
+            </span>
+            <span
+              title="Net cash flow, all time: total income minus total expenses"
+              className={animatedNetCashFlow >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}
+            >
+              Net: <span className="font-semibold">
+                {animatedNetCashFlow >= 0 ? "+" : "-"}${Math.abs(animatedNetCashFlow).toFixed(2)}
+              </span>
+            </span>
           </span>
         </div>
 

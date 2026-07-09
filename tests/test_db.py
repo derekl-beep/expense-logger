@@ -685,6 +685,62 @@ def test_save_income_nonexistent_reimburses_expense_id_returns_error(user_id):
     assert db.get_income() == []
 
 
+# --- update_income / delete_income ----------------------------------------
+
+def test_update_income_partial_fields(user_id):
+    saved = add_income(user_id, 2500, "Salary", "Payroll", "2026-06-01")
+    db.update_income(saved["id"], amount=2600)
+
+    row = db.get_income()[0]
+    assert row["amount"] == 2600.0
+    assert row["category"] == "Salary"  # untouched fields preserved
+    assert row["description"] == "Payroll"
+
+
+def test_update_income_category_description_date(user_id):
+    saved = add_income(user_id, 40, "Gift", "Birthday gift", "2026-06-01")
+    db.update_income(saved["id"], category="Rebate", description="Cashback", date="2026-06-05")
+
+    row = db.get_income()[0]
+    assert row["category"] == "Rebate"
+    assert row["description"] == "Cashback"
+    assert row["date"] == "2026-06-05"
+    assert row["amount"] == 40.0  # untouched field preserved
+
+
+def test_update_income_with_no_fields_is_noop(user_id):
+    saved = add_income(user_id, 40, "Gift", "Birthday gift", "2026-06-01")
+    result = db.update_income(saved["id"])
+    assert result == {"status": "nothing to update"}
+
+
+def test_update_income_does_not_touch_reimburses_expense_id(user_id):
+    expense = add_expense(user_id, 42, "Dining", "Dinner", "2026-06-01")
+    income_id = add_income(user_id, 21, "Reimbursement", "From Jake", "2026-06-02")["id"]
+    db.link_income_to_expense(income_id, expense["id"])
+
+    db.update_income(income_id, amount=25)
+
+    assert db.get_income()[0]["reimburses_expense_id"] == expense["id"]
+
+
+def test_update_income_not_found():
+    result = db.update_income(999999, amount=10)
+    assert result == {"status": "not_found"}
+
+
+def test_delete_income(user_id):
+    saved = add_income(user_id, 40, "Gift", "Birthday gift", "2026-06-01")
+    result = db.delete_income(saved["id"])
+    assert result == {"status": "deleted"}
+    assert db.get_income() == []
+
+
+def test_delete_income_not_found():
+    result = db.delete_income(999999)
+    assert result == {"status": "not_found"}
+
+
 # --- get_average_transaction --------------------------------------------
 
 def test_average_transaction_for_category(user_id):
@@ -753,6 +809,27 @@ def test_budget_status_excludes_other_months(user_id):
 
 def test_budget_status_category_with_no_budget_returns_empty():
     assert db.get_budget_status(category="Dining") == []
+
+
+def test_budget_status_nets_out_linked_reimbursement(user_id):
+    db.set_budget("Dining", 200)
+    expense = add_expense(user_id, 60, "Dining", "Dinner", "2026-06-05")
+    income_id = add_income(user_id, 30, "Reimbursement", "From Jake", "2026-06-06")["id"]
+    db.link_income_to_expense(income_id, expense["id"])
+
+    result = db.get_budget_status(month="2026-06")
+    assert result[0]["spent"] == 30.0
+
+
+def test_budget_status_over_reimbursement_clips_at_zero(user_id):
+    db.set_budget("Dining", 200)
+    expense = add_expense(user_id, 60, "Dining", "Dinner", "2026-06-05")
+    income_id = add_income(user_id, 90, "Reimbursement", "From Jake", "2026-06-06")["id"]
+    db.link_income_to_expense(income_id, expense["id"])
+
+    result = db.get_budget_status(month="2026-06")
+    assert result[0]["spent"] == 0.0
+    assert result[0]["remaining"] == 200.0
 
 
 # --- api_calls / rate limiting --------------------------------------------

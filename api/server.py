@@ -13,10 +13,11 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 
-from agent.categories import CATEGORIES
+from agent.categories import CATEGORIES, INCOME_CATEGORIES
 from agent.db import (
     delete_budget,
     delete_expense,
+    delete_income,
     get_api_call_count,
     get_budget_status,
     get_budgets,
@@ -27,6 +28,7 @@ from agent.db import (
     increment_api_call_count,
     set_budget,
     update_expense,
+    update_income,
 )
 from agent.main import clear_session, stream_chat
 from agent.tools import COMMAND_PROMPTS, SUGGESTED_PROMPTS
@@ -208,6 +210,35 @@ def delete_expense_endpoint(id: int, user_id: int = Depends(get_current_user)):
         raise HTTPException(status_code=404, detail="Expense not found")
     return result
 
+
+class IncomeUpdateRequest(BaseModel):
+    amount: float | None = None
+    category: str | None = None
+    description: str | None = None
+    date: str | None = None
+
+    @field_validator("category")
+    @classmethod
+    def validate_category(cls, v):
+        if v is not None and v not in INCOME_CATEGORIES:
+            raise ValueError(f"Invalid category: {v}")
+        return v
+
+
+@app.patch("/income/{id}")
+def update_income_endpoint(id: int, req: IncomeUpdateRequest, user_id: int = Depends(get_current_user)):
+    result = update_income(id, req.amount, req.category, req.description, req.date)
+    if result.get("status") == "not_found":
+        raise HTTPException(status_code=404, detail="Income entry not found")
+    return result
+
+
+@app.delete("/income/{id}")
+def delete_income_endpoint(id: int, user_id: int = Depends(get_current_user)):
+    result = delete_income(id)
+    if result.get("status") == "not_found":
+        raise HTTPException(status_code=404, detail="Income entry not found")
+    return result
 
 
 @app.get("/expenses/export")

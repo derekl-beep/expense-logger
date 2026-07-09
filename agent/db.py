@@ -773,6 +773,46 @@ def delete_expense(id: int) -> dict:
     return {"status": "deleted"}
 
 
+def update_income(
+    id: int,
+    amount: float = None,
+    category: str = None,
+    description: str = None,
+    date: str = None,
+) -> dict:
+    # Deliberately does not touch reimburses_expense_id — that stays the exclusive
+    # job of link_income_to_expense so the two tools' responsibilities don't overlap.
+    fields, params = [], []
+    if amount is not None:
+        fields.append("amount = %s")
+        params.append(amount)
+    if category is not None:
+        fields.append("category = %s")
+        params.append(category)
+    if description is not None:
+        fields.append("description = %s")
+        params.append(description)
+    if date is not None:
+        fields.append("date = %s")
+        params.append(date)
+
+    if not fields:
+        return {"status": "nothing to update"}
+
+    params.append(id)
+    cur = _run(f"UPDATE income SET {', '.join(fields)} WHERE id = %s", params)
+    if cur.rowcount == 0:
+        return {"status": "not_found"}
+    return {"status": "updated"}
+
+
+def delete_income(id: int) -> dict:
+    cur = _run("DELETE FROM income WHERE id = %s RETURNING id", (id,))
+    if cur.fetchone() is None:
+        return {"status": "not_found"}
+    return {"status": "deleted"}
+
+
 def get_budgets() -> list[dict]:
     cur = _run("SELECT category, monthly_limit FROM budgets ORDER BY category")
     return [{"category": r["category"], "monthly_limit": float(r["monthly_limit"])} for r in cur.fetchall()]
@@ -784,15 +824,23 @@ def get_budget_status(category: str = None, month: str = None) -> list[dict]:
     month_start = ref.replace(day=1)
     month_end = _shift_month(month_start, 1)
 
-    # Single JOIN instead of N+1 per-category queries.
+    # Single JOIN instead of N+1 per-category queries. Each expense's contribution
+    # to spent is netted against any income linked to it via reimburses_expense_id,
+    # clipped at 0 so a fully-or-over-reimbursed expense can't drag spent negative.
     query = """
         SELECT b.category, b.monthly_limit,
-               COALESCE(SUM(e.amount), 0) AS spent
+               COALESCE(SUM(GREATEST(e.amount - COALESCE(r.reimbursed, 0), 0)), 0) AS spent
         FROM budgets b
         LEFT JOIN expenses e
                ON LOWER(e.category) = LOWER(b.category)
               AND e.date >= %s AND e.date < %s
               AND e.deleted_at IS NULL
+        LEFT JOIN (
+            SELECT reimburses_expense_id, SUM(amount) AS reimbursed
+            FROM income
+            WHERE reimburses_expense_id IS NOT NULL
+            GROUP BY reimburses_expense_id
+        ) r ON r.reimburses_expense_id = e.id
         WHERE 1=1
     """
     params: list = [month_start.isoformat(), month_end.isoformat()]

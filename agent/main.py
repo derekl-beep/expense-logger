@@ -48,20 +48,25 @@ For questions about income received (e.g. "how much did I get paid this month", 
 ## Budgets
 For budget questions (e.g. "am I over budget", "how much do I have left for groceries"), call get_budget_status. Only categories with a budget configured are returned — if a category isn't in the result, tell the user it has no budget set rather than guessing a limit.
 To set or change a monthly limit (e.g. "set my dining budget to $400"), call set_budget. To remove a budget entirely, call delete_budget.
+get_budget_status's spent figure is net of any linked reimbursements (see Logging income) — a $60 expense with a $30 linked reimbursement counts as $30 spent, reflecting the expense's own month regardless of when the reimbursement was recorded or linked. This differs from get_category_breakdown, get_monthly_trend, and the other historical-spend tools below, which always report the gross amount actually paid. If a user notices the numbers don't match for the same category/month, explain the difference rather than guessing one of them is wrong.
 
 ## Editing and flagging
 save_expense returns the new expense's id. If you need to immediately update the just-saved expense (e.g. flag it), use that id directly with update_expense — never call get_expenses to find it.
 For all other edits and flags, call get_expenses to find the right record first, then call update_expense.
 If the user refers to "the last one", "that expense", or similar, call get_expenses (no filters, most recent first) to identify it by context.
 Flagging marks an expense for follow-up (flagged=true). Unflagging clears it (flagged=false).
-update_expense and delete_expense only ever operate on expenses. Income entries can't be edited or deleted, only relinked via link_income_to_expense (see Logging income) — expense ids and income ids are separate sequences that can collide, so never call update_expense/delete_expense with an id you got from get_income or save_income, and never call link_income_to_expense with an id you got from get_expenses or save_expense. If the user asks to edit or delete an income entry's amount/date/description, tell them that isn't supported yet instead of guessing.
+
+Income entries can be edited too. save_income returns the new income entry's id — use that id directly with update_income if editing immediately after saving, otherwise call get_income first to find the right id. update_income never changes an entry's reimbursement link (reimburses_expense_id); if the user wants to change what an income entry reimburses, use link_income_to_expense instead (see Logging income).
+
+There are five tools split cleanly by table: update_expense and delete_expense only ever operate on expenses; update_income, delete_income, and link_income_to_expense only ever operate on income. Expense ids and income ids are separate sequences that collide (e.g. expense id 7 and income id 7 can both exist and refer to unrelated rows) — never pass an id you got from get_expenses or save_expense as the income_id/id argument to update_income, delete_income, or link_income_to_expense, and never pass an id you got from get_income or save_income as the id argument to update_expense or delete_expense.
 
 ## Receipt / screenshot scanning
 When the user's message contains extracted text from one or more images (prefixed with "[Extracted text from image...]"), parse each block for expense line items. Read dates and amounts exactly as shown — do not approximate. For category, use your best judgement.
 When multiple images are attached, the same transaction can appear in more than one block — this happens when someone screenshots overlapping date ranges of the same account. Before calling save_expense or save_income, compare line items across all the blocks in this message; if two entries (expense or income) share the same date, amount, and description, treat them as the same transaction and save it only once. This applies just as much to pasted bank/transaction text as to screenshots — check for overlap within a single pasted statement too.
 
 ## Deleting
-To delete, first call get_expenses to find the ID, then call delete_expense. This only applies to expenses (see above).
+To delete an expense, first call get_expenses to find the ID, then call delete_expense.
+To delete an income entry, first call get_income to find the ID, then call delete_income. Remember expense ids and income ids are separate sequences — see above.
 
 {category_hints}"""
 
@@ -84,6 +89,8 @@ TOOL_STATUS_LABELS = {
     "find_similar_expense": "Checking vendor history…",
     "update_expense": "Updating expense…",
     "delete_expense": "Deleting expense…",
+    "update_income": "Updating income…",
+    "delete_income": "Deleting income…",
     "get_expenses": "Looking up expenses…",
     "get_income": "Looking up income…",
     "link_income_to_expense": "Linking reimbursement…",
