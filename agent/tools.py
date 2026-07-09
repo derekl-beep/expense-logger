@@ -16,6 +16,7 @@ from agent.db import (
     get_weekday_pattern,
     get_weekly_pace,
     get_yoy_comparison,
+    link_income_to_expense,
     save_expense,
     save_income,
     set_budget,
@@ -50,8 +51,21 @@ TOOL_DEFINITIONS = [
                 "category":   {**_income_category_enum, "description": "Income category"},
                 "description": {"type": "string", "description": "Short description of the income"},
                 "date":        {"type": "string", "description": "ISO date, e.g. 2025-01-13"},
+                "reimburses_expense_id": {"type": "integer", "description": "If category is Reimbursement and you found the specific expense this repays via get_expenses, pass its id here to link them. Omit if no confident match was found."},
             },
             "required": ["amount", "category", "description", "date"],
+        },
+    },
+    {
+        "name": "link_income_to_expense",
+        "description": "Link (or unlink) an existing income entry as a reimbursement for a specific expense. Use this to correct or add a link after the fact — e.g. the user says an income entry was actually a reimbursement for a specific expense, or that an existing link is wrong. First call get_income and get_expenses to confirm the exact ids — income and expense ids are separate sequences that can collide.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "income_id":  {"type": "integer", "description": "The income entry's id"},
+                "expense_id": {"type": "integer", "description": "The expense id it reimburses. Omit (or pass null) to unlink."},
+            },
+            "required": ["income_id"],
         },
     },
     {
@@ -301,6 +315,7 @@ TOOL_HANDLERS = {
     "find_similar_expense":   find_similar_expenses,
     "get_expenses":           get_expenses,
     "get_income":             get_income,
+    "link_income_to_expense": link_income_to_expense,
     "get_category_breakdown": get_category_breakdown,
     "get_monthly_trend":      get_monthly_trend,
     "get_recurring_expenses": get_recurring_expenses,
