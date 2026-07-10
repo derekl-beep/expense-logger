@@ -1,4 +1,6 @@
+import logging
 import os
+import traceback
 from datetime import date
 
 import anthropic
@@ -8,6 +10,8 @@ from agent.categories import CATEGORY_HINTS, INCOME_CATEGORY_HINTS
 from agent.tools import TOOL_DEFINITIONS, TOOL_HANDLERS
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
 
@@ -116,6 +120,49 @@ def _trim_session(messages: list) -> None:
         messages[:] = messages[-HISTORY_LIMIT:]
 
 
+def _repair_dangling_tool_use(messages: list) -> None:
+    """Drop a trailing assistant tool_use turn that never got its tool_result
+    appended. This can only happen from a session that was corrupted by a
+    since-fixed bug (a tool handler exception used to abort _run_tools before
+    it appended the matching tool_result) — but since _sessions lives only in
+    memory, any session already in that broken state stays broken forever
+    without this: every future turn would keep failing the same way, since
+    Anthropic's API rejects a tool_use block with no following tool_result.
+    Safe going forward too, in case some other future bug reintroduces the
+    same failure mode."""
+    if not messages:
+        return
+    last = messages[-1]
+    if last.get("role") == "assistant" and any(getattr(b, "type", None) == "tool_use" for b in last.get("content", [])):
+        messages.pop()
+
+
+def _append_user_turn(messages: list, content: str) -> None:
+    """Append a new user turn. Normally the prior turn ends on an
+    assistant/tool_result message, so this just appends. But right after
+    _repair_dangling_tool_use drops a corrupted trailing assistant turn, the
+    new tail is that turn's original *user* message — appending a second
+    user message on top of it would leave two consecutive user-role messages.
+    Anthropic's docs disagree with each other on whether that's a hard error
+    (one reference says roles must strictly alternate; the SDK README says
+    consecutive same-role messages are just combined) — since this can't be
+    verified without a live API key, merge defensively rather than gamble on
+    which doc is current. The tail's content can be a plain string (the
+    common case) or a list of content blocks (a tool_results turn from an
+    earlier round in the same corrupted multi-round tool-calling turn — the
+    likely actual shape for a crash partway through a large batch import,
+    since the SYSTEM prompt does a lookup call before each save call)."""
+    if messages and messages[-1]["role"] == "user":
+        tail_content = messages[-1]["content"]
+        if isinstance(tail_content, str):
+            messages[-1]["content"] = f"{tail_content}\n\n{content}"
+            return
+        if isinstance(tail_content, list):
+            tail_content.append({"type": "text", "text": content})
+            return
+    messages.append({"role": "user", "content": content})
+
+
 def _ocr_image(image_data: str, image_media_type: str) -> str:
     response = client.messages.create(
         model=MODEL_VISION,
@@ -146,13 +193,28 @@ def _build_user_content(user_input: str, images: list[dict] | None) -> str:
 
 
 def _run_tools(response_content: list, user_id: int, on_result=None) -> list:
+    # Every tool_use block below MUST produce a tool_result, even if the
+    # handler raises. The assistant message containing these tool_use blocks
+    # is already appended to the persistent session history by the caller
+    # before this function runs — if a handler exception propagated out of
+    # here uncaught, the matching tool_result would never get appended,
+    # permanently corrupting that session's history (Anthropic's API rejects
+    # every future turn with "tool_use ids were found without tool_result
+    # blocks" until the session is cleared). Catching per-handler keeps one
+    # bad call from taking down the rest of a multi-tool-call batch (e.g. a
+    # large bank-statement import) and reports the failure back to the model
+    # as a tool_result instead, so it can react instead of crashing.
     tool_results = []
     for block in response_content:
         if block.type == "tool_use":
             kwargs = dict(block.input)
             if block.name in ("save_expense", "save_income"):
                 kwargs["user_id"] = user_id
-            result = TOOL_HANDLERS[block.name](**kwargs)
+            try:
+                result = TOOL_HANDLERS[block.name](**kwargs)
+            except Exception:
+                logger.error("tool %s(%s) failed:\n%s", block.name, kwargs, traceback.format_exc())
+                result = {"status": "error", "message": f"{block.name} failed unexpectedly — tell the user and don't retry automatically."}
             print(f"[tool] {block.name}({kwargs}) -> {result}")
             if on_result:
                 on_result(block.name, result)
@@ -170,8 +232,9 @@ def clear_session(user_id: int) -> None:
 
 def chat(user_input: str, user_id: int, username: str = "user", images: list[dict] | None = None) -> str:
     messages = _sessions.setdefault(str(user_id), [])
+    _repair_dangling_tool_use(messages)
     content = _build_user_content(user_input, images)
-    messages.append({"role": "user", "content": content})
+    _append_user_turn(messages, content)
     _trim_session(messages)
 
     while True:
@@ -203,10 +266,11 @@ def chat(user_input: str, user_id: int, username: str = "user", images: list[dic
 
 def stream_chat(user_input: str, user_id: int, username: str = "user", images: list[dict] | None = None):
     messages = _sessions.setdefault(str(user_id), [])
+    _repair_dangling_tool_use(messages)
     if images:
         yield {"status": "Reading image…" if len(images) == 1 else "Reading images…"}
     content = _build_user_content(user_input, images)
-    messages.append({"role": "user", "content": content})
+    _append_user_turn(messages, content)
     _trim_session(messages)
 
     last_char = ""
