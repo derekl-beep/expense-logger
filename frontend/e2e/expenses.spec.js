@@ -23,6 +23,19 @@ test("opens the edit dialog pre-filled with the expense's existing details", asy
   await expect(dialog.getByRole("combobox")).toContainText("Dining");
 });
 
+test("reopening the same expense after Cancel shows its current values, not the unsaved edit", async ({ page }) => {
+  await expenseRow(page, "Gas at Shell").click();
+  const dialog = page.getByRole("dialog");
+  const amountInput = dialog.locator('input[type="number"]');
+  await expect(amountInput).toHaveValue("54.2");
+
+  await amountInput.fill("999");
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+
+  await expenseRow(page, "Gas at Shell").click();
+  await expect(dialog.locator('input[type="number"]')).toHaveValue("54.2");
+});
+
 test("splitting an amount divides it and updates the input", async ({ page }) => {
   await expenseRow(page, "Dinner at Pasta House").click();
   const dialog = page.getByRole("dialog");

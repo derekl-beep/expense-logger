@@ -26,3 +26,13 @@ test("marks an over-budget category in red", async ({ page }) => {
   const rentRow = page.locator("button").filter({ hasText: "Rent" });
   await expect(rentRow.locator("span").filter({ hasText: "$" }).last()).toHaveClass(/text-red-600/);
 });
+
+test("expanding 'view more' categories persists across an Expenses/Income tab switch", async ({ page }) => {
+  await page.getByText(/View \d+ more/).click();
+  await expect(page.getByText("View less")).toBeVisible();
+
+  await page.getByRole("tab", { name: "Income" }).click();
+  await page.getByRole("tab", { name: "Expenses" }).click();
+
+  await expect(page.getByText("View less")).toBeVisible();
+});
