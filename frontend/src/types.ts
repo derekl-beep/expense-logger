@@ -61,5 +61,15 @@ export interface EditValues {
   flagged: boolean;
 }
 
+// Editable fields on an income entry — no flagged (income has no such
+// concept) and no reimburses_expense_id (that stays link_income_to_expense's
+// exclusive job on the backend; this dialog never touches it).
+export interface IncomeEditValues {
+  amount: number;
+  category: string;
+  description: string;
+  date: string;
+}
+
 // authFetch: injects the bearer token and triggers onUnauthorized on 401.
 export type AuthFetch = (url: string, opts?: RequestInit) => Promise<Response>;

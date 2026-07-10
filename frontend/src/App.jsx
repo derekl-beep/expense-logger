@@ -192,6 +192,7 @@ export default function App() {
               token={token}
               username={username}
               onExpenseChange={fetchExpenses}
+              onIncomeChange={fetchIncome}
               onUnauthorized={handleLogout}
               loading={expensesLoading}
               highlightIds={highlightIds}

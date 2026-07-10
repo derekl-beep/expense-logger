@@ -659,6 +659,17 @@ def test_get_expenses_reimbursed_flag(user_id):
     assert result["Lunch"] is False
 
 
+def test_get_expenses_reimbursed_flag_clears_when_reimbursing_income_deleted(user_id):
+    expense = add_expense(user_id, 42, "Dining", "Dinner", "2026-06-01")
+    income_id = add_income(user_id, 21, "Reimbursement", "From Jake", "2026-06-02")["id"]
+    db.link_income_to_expense(income_id, expense["id"])
+
+    db.delete_income(income_id)
+
+    result = {r["description"]: r["reimbursed"] for r in db.get_expenses()}
+    assert result["Dinner"] is False
+
+
 def test_link_income_to_expense_nonexistent_expense_returns_error(user_id):
     income_id = add_income(user_id, 21, "Reimbursement", "From Jake", "2026-06-02")["id"]
 
@@ -739,6 +750,43 @@ def test_delete_income(user_id):
 def test_delete_income_not_found():
     result = db.delete_income(999999)
     assert result == {"status": "not_found"}
+
+
+def test_delete_income_is_soft_delete_not_permanent(user_id):
+    saved = add_income(user_id, 40, "Gift", "Birthday gift", "2026-06-01")
+    db.delete_income(saved["id"])
+
+    row = db._run("SELECT deleted_at FROM income WHERE id = %s", (saved["id"],)).fetchone()
+    assert row is not None  # row still physically exists
+    assert row["deleted_at"] is not None
+
+
+def test_delete_income_twice_returns_not_found_second_time(user_id):
+    saved = add_income(user_id, 40, "Gift", "Birthday gift", "2026-06-01")
+    db.delete_income(saved["id"])
+
+    result = db.delete_income(saved["id"])
+
+    assert result == {"status": "not_found"}
+
+
+def test_update_income_rejects_soft_deleted_entry(user_id):
+    saved = add_income(user_id, 40, "Gift", "Birthday gift", "2026-06-01")
+    db.delete_income(saved["id"])
+
+    result = db.update_income(saved["id"], amount=99)
+
+    assert result == {"status": "not_found"}
+
+
+def test_link_income_to_expense_rejects_soft_deleted_income(user_id):
+    expense = add_expense(user_id, 42, "Dining", "Dinner", "2026-06-01")
+    income_id = add_income(user_id, 21, "Reimbursement", "From Jake", "2026-06-02")["id"]
+    db.delete_income(income_id)
+
+    result = db.link_income_to_expense(income_id, expense["id"])
+
+    assert result["status"] == "error"
 
 
 # --- get_average_transaction --------------------------------------------
@@ -830,6 +878,19 @@ def test_budget_status_over_reimbursement_clips_at_zero(user_id):
     result = db.get_budget_status(month="2026-06")
     assert result[0]["spent"] == 0.0
     assert result[0]["remaining"] == 200.0
+
+
+def test_budget_status_ignores_deleted_reimbursement(user_id):
+    db.set_budget("Dining", 200)
+    expense = add_expense(user_id, 60, "Dining", "Dinner", "2026-06-05")
+    income_id = add_income(user_id, 30, "Reimbursement", "From Jake", "2026-06-06")["id"]
+    db.link_income_to_expense(income_id, expense["id"])
+    assert db.get_budget_status(month="2026-06")[0]["spent"] == 30.0  # net, sanity check
+
+    db.delete_income(income_id)
+
+    result = db.get_budget_status(month="2026-06")
+    assert result[0]["spent"] == 60.0  # back to gross once the reimbursement is deleted
 
 
 # --- api_calls / rate limiting --------------------------------------------

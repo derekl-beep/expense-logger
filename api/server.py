@@ -135,6 +135,11 @@ def categories_endpoint():
     return CATEGORIES
 
 
+@app.get("/income/categories")
+def income_categories_endpoint():
+    return INCOME_CATEGORIES
+
+
 @app.get("/expenses/recurring")
 def recurring_expenses_endpoint(user_id: int = Depends(get_current_user)):
     return get_recurring_expenses()

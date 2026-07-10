@@ -59,6 +59,11 @@ def test_categories_endpoint_returns_category_list():
     assert client.get("/categories").json() == CATEGORIES
 
 
+def test_income_categories_endpoint_returns_income_category_list():
+    from agent.categories import INCOME_CATEGORIES
+    assert client.get("/income/categories").json() == INCOME_CATEGORIES
+
+
 def test_chat_suggestions_endpoint():
     from agent.tools import SUGGESTED_PROMPTS
     assert client.get("/chat/suggestions").json() == SUGGESTED_PROMPTS

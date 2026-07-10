@@ -4,10 +4,14 @@ import type { Income } from "@/types";
 
 export interface IncomeListProps {
   income: Income[];
+  onEdit: (income: Income) => void;
 }
 
-// Read-only Phase 1 income view — no edit/delete UI yet.
-export default function IncomeList({ income }: IncomeListProps) {
+// Click a row to edit or delete (delete lives inside the edit dialog's
+// footer, mirroring ExpenseEditDialog — no separate swipe-to-delete gesture
+// here, unlike ExpenseList, to keep income's UI complexity proportional to
+// what's actually built for it so far).
+export default function IncomeList({ income, onEdit }: IncomeListProps) {
   const groupedByDate = income.reduce<{ date: string; items: Income[] }[]>((groups, i) => {
     const last = groups[groups.length - 1];
     if (!last || last.date !== i.date) groups.push({ date: i.date, items: [i] });
@@ -17,7 +21,7 @@ export default function IncomeList({ income }: IncomeListProps) {
 
   return (
     <>
-      {/* ── Income mobile card list — read-only Phase 1, no swipe/edit/delete ── */}
+      {/* ── Income mobile card list — click a row to edit or delete ── */}
       <div className="md:hidden">
         {income.length === 0 ? (
           <p className="text-center py-16 text-muted-foreground text-sm">No income yet</p>
@@ -27,7 +31,11 @@ export default function IncomeList({ income }: IncomeListProps) {
               <span className="text-xs font-medium text-muted-foreground">{formatSectionDate(date)}</span>
             </div>
             {items.map((i) => (
-              <div key={i.id} className="flex items-center gap-3 px-4 py-3 border-b border-border/50">
+              <div
+                key={i.id}
+                className="flex items-center gap-3 px-4 py-3 border-b border-border/50 active:bg-muted transition-colors cursor-pointer"
+                onClick={() => onEdit(i)}
+              >
                 <CategoryBadge category={i.category} small loggedBy={undefined} onUserClick={undefined} userActive={undefined} />
                 <span className="flex-1 min-w-0">
                   <span className="block text-sm font-medium text-foreground truncate">{i.description}</span>
@@ -44,7 +52,7 @@ export default function IncomeList({ income }: IncomeListProps) {
         ))}
       </div>
 
-      {/* ── Income desktop table — read-only Phase 1, no edit/delete ── */}
+      {/* ── Income desktop table — click a row to edit or delete ── */}
       <table className="w-full text-sm border-collapse hidden md:table">
         <thead className="sticky top-0 bg-background z-10">
           <tr className="border-b border-border">
@@ -58,7 +66,7 @@ export default function IncomeList({ income }: IncomeListProps) {
           {income.length === 0 ? (
             <tr><td colSpan={4} className="text-center py-16 text-muted-foreground text-sm">No income yet</td></tr>
           ) : income.map((i) => (
-            <tr key={i.id} className="border-b border-border/50">
+            <tr key={i.id} className="border-b border-border/50 hover:bg-muted/50 cursor-pointer" onClick={() => onEdit(i)}>
               <td className="px-4 py-3 text-xs text-muted-foreground tabular-nums whitespace-nowrap">{formatDate(i.date)}</td>
               <td className="px-3 py-3 text-sm text-foreground">
                 <span>{i.description}</span>

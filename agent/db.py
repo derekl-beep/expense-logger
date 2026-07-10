@@ -97,6 +97,7 @@ _run("""
 """)
 
 _run("ALTER TABLE income ADD COLUMN IF NOT EXISTS reimburses_expense_id INTEGER REFERENCES expenses(id)")
+_run("ALTER TABLE income ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ")
 
 _run("CREATE INDEX IF NOT EXISTS income_description_trgm_idx ON income USING gin (description gin_trgm_ops)")
 
@@ -213,7 +214,7 @@ def link_income_to_expense(income_id: int, expense_id: int = None) -> dict:
             return {"status": "error", "message": f"No expense with id {expense_id}"}
 
     cur = _run(
-        "UPDATE income SET reimburses_expense_id = %s WHERE id = %s RETURNING id",
+        "UPDATE income SET reimburses_expense_id = %s WHERE id = %s AND deleted_at IS NULL RETURNING id",
         (expense_id, income_id),
     )
     row = cur.fetchone()
@@ -251,7 +252,7 @@ def get_expenses(
 ) -> list[dict]:
     query = """
         SELECT e.id, e.amount, e.category, e.description, e.date, e.flagged, u.username AS logged_by,
-               EXISTS (SELECT 1 FROM income i WHERE i.reimburses_expense_id = e.id) AS reimbursed
+               EXISTS (SELECT 1 FROM income i WHERE i.reimburses_expense_id = e.id AND i.deleted_at IS NULL) AS reimbursed
         FROM expenses e
         LEFT JOIN users u ON e.user_id = u.id
         WHERE e.deleted_at IS NULL
@@ -302,7 +303,7 @@ def get_income(
         FROM income i
         LEFT JOIN users u ON i.user_id = u.id
         LEFT JOIN expenses e ON e.id = i.reimburses_expense_id
-        WHERE 1=1
+        WHERE i.deleted_at IS NULL
     """
     params = []
     if start_date:
@@ -800,14 +801,14 @@ def update_income(
         return {"status": "nothing to update"}
 
     params.append(id)
-    cur = _run(f"UPDATE income SET {', '.join(fields)} WHERE id = %s", params)
+    cur = _run(f"UPDATE income SET {', '.join(fields)} WHERE id = %s AND deleted_at IS NULL", params)
     if cur.rowcount == 0:
         return {"status": "not_found"}
     return {"status": "updated"}
 
 
 def delete_income(id: int) -> dict:
-    cur = _run("DELETE FROM income WHERE id = %s RETURNING id", (id,))
+    cur = _run("UPDATE income SET deleted_at = NOW() WHERE id = %s AND deleted_at IS NULL RETURNING id", (id,))
     if cur.fetchone() is None:
         return {"status": "not_found"}
     return {"status": "deleted"}
@@ -838,7 +839,7 @@ def get_budget_status(category: str = None, month: str = None) -> list[dict]:
         LEFT JOIN (
             SELECT reimburses_expense_id, SUM(amount) AS reimbursed
             FROM income
-            WHERE reimburses_expense_id IS NOT NULL
+            WHERE reimburses_expense_id IS NOT NULL AND deleted_at IS NULL
             GROUP BY reimburses_expense_id
         ) r ON r.reimburses_expense_id = e.id
         WHERE 1=1
