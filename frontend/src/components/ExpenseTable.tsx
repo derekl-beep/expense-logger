@@ -6,11 +6,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useAnimatedNumber } from "@/lib/categoryVisuals";
 import { formatMonth } from "@/components/expenseTableFormat";
 import ExpenseEditDialog from "@/components/ExpenseEditDialog";
+import IncomeEditDialog from "@/components/IncomeEditDialog";
 import ExpenseList from "@/components/ExpenseList";
 import IncomeList from "@/components/IncomeList";
 import CategoryBreakdown from "@/components/CategoryBreakdown";
 import RecurringSection from "@/components/RecurringSection";
-import type { AuthFetch, Budget, EditValues, Expense, Income, RecurringCharge } from "@/types";
+import type { AuthFetch, Budget, EditValues, Expense, Income, IncomeEditValues, RecurringCharge } from "@/types";
 
 export interface ExpenseTableProps {
   expenses: Expense[];
@@ -19,12 +20,13 @@ export interface ExpenseTableProps {
   token: string;
   username: string;
   onExpenseChange: () => void;
+  onIncomeChange?: () => void;
   onUnauthorized: () => void;
   loading?: boolean;
   highlightIds?: Set<number>;
 }
 
-export default function ExpenseTable({ expenses, income = [], className = "", token, username, onExpenseChange, onUnauthorized, loading = false, highlightIds }: ExpenseTableProps) {
+export default function ExpenseTable({ expenses, income = [], className = "", token, username, onExpenseChange, onIncomeChange, onUnauthorized, loading = false, highlightIds }: ExpenseTableProps) {
   const authFetch: AuthFetch = (url, opts = {}) => {
     const res = fetch(url, { ...opts, headers: { ...opts.headers, Authorization: `Bearer ${token}` } });
     res.then((r) => { if (r.status === 401) onUnauthorized(); });
@@ -73,11 +75,15 @@ export default function ExpenseTable({ expenses, income = [], className = "", to
   const [selectedMonthOverride, setSelectedMonthOverride] = useState<string | null>(null);
   const [flaggedOnly, setFlaggedOnly] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
+  const [editingIncome, setEditingIncome] = useState<Income | null>(null);
   const [categories, setCategories] = useState<string[]>([]);
+  const [incomeCategories, setIncomeCategories] = useState<string[]>([]);
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [recurring, setRecurring] = useState<RecurringCharge[]>([]);
   const [overrides, setOverrides] = useState<Record<number, Partial<Expense>>>({});
   const [deletedIds, setDeletedIds] = useState<Set<number>>(() => new Set());
+  const [incomeOverrides, setIncomeOverrides] = useState<Record<number, Partial<Income>>>({});
+  const [deletedIncomeIds, setDeletedIncomeIds] = useState<Set<number>>(() => new Set());
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [userFilter, setUserFilter] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -88,6 +94,7 @@ export default function ExpenseTable({ expenses, income = [], className = "", to
   const [showAllCategories, setShowAllCategories] = useState(false);
   const [showRecurring, setShowRecurring] = useState(false);
   const pendingDeletes = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
+  const pendingIncomeDeletes = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
   const listRef = useRef<HTMLDivElement>(null);
   const [showScrollToTop, setShowScrollToTop] = useState(false);
 
@@ -103,6 +110,7 @@ export default function ExpenseTable({ expenses, income = [], className = "", to
 
   useEffect(() => {
     fetch("/categories").then((r) => r.json()).then(setCategories);
+    fetch("/income/categories").then((r) => r.json()).then(setIncomeCategories);
   }, []);
 
   const fetchBudgets = () => {
@@ -120,6 +128,12 @@ export default function ExpenseTable({ expenses, income = [], className = "", to
       .filter((e) => !deletedIds.has(e.id))
       .map((e) => (overrides[e.id] ? { ...e, ...overrides[e.id] } : e));
   }, [expenses, overrides, deletedIds]);
+
+  const incomeItems = useMemo(() => {
+    return income
+      .filter((i) => !deletedIncomeIds.has(i.id))
+      .map((i) => (incomeOverrides[i.id] ? { ...i, ...incomeOverrides[i.id] } : i));
+  }, [income, incomeOverrides, deletedIncomeIds]);
 
   const months = useMemo(() => {
     const seen = new Set<string>();
@@ -141,9 +155,10 @@ export default function ExpenseTable({ expenses, income = [], className = "", to
   const animatedTotal = useAnimatedNumber(total);
   const emptyMessage = items.length === 0 ? "No expenses yet" : "No expenses match your filters";
 
-  // Income view has no filters in Phase 1 — total is just the sum of
-  // whatever the API returned (already sorted date DESC server-side).
-  const incomeTotal = income.reduce((sum, i) => sum + i.amount, 0);
+  // Income view has no filters — total is just the sum of incomeItems
+  // (already sorted date DESC server-side, adjusted for optimistic
+  // edits/deletes the same way `items` adjusts the expense list).
+  const incomeTotal = incomeItems.reduce((sum, i) => sum + i.amount, 0);
   const animatedIncomeTotal = useAnimatedNumber(incomeTotal);
   const displayTotal = view === "expenses" ? animatedTotal : animatedIncomeTotal;
 
@@ -273,6 +288,78 @@ export default function ExpenseTable({ expenses, income = [], className = "", to
     setEditingExpense(null);
   };
 
+  const openEditIncome = (i: Income) => {
+    setEditingIncome(i);
+  };
+
+  const saveEditIncome = async (values: IncomeEditValues) => {
+    if (!editingIncome) return;
+    const id = editingIncome.id;
+    const original = incomeItems.find((x) => x.id === id);
+    const changes: Partial<IncomeEditValues> = {};
+    if (values.amount !== editingIncome.amount) changes.amount = values.amount;
+    if (values.category !== editingIncome.category) changes.category = values.category;
+    if (values.description !== editingIncome.description) changes.description = values.description;
+    if (values.date !== editingIncome.date) changes.date = values.date;
+    setIncomeOverrides((prev) => ({ ...prev, [id]: { ...prev[id], ...values } }));
+    setEditingIncome(null);
+    try {
+      const res = await authFetch(`/income/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(changes),
+      });
+      if (!res.ok) throw new Error();
+      toast.success("Income updated");
+      onIncomeChange?.();
+    } catch {
+      setIncomeOverrides((prev) => ({ ...prev, [id]: { ...prev[id], ...original } }));
+      toast.error("Failed to update income");
+    }
+  };
+
+  const restoreDeletedIncome = (id: number) => {
+    clearTimeout(pendingIncomeDeletes.current[id]);
+    delete pendingIncomeDeletes.current[id];
+    setDeletedIncomeIds((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  };
+
+  const deleteIncomeById = (id: number) => {
+    setDeletedIncomeIds((prev) => new Set(prev).add(id));
+
+    const toastId = toast("Income deleted", {
+      action: { label: "Undo", onClick: () => restoreDeletedIncome(id) },
+      duration: 5000,
+    });
+
+    pendingIncomeDeletes.current[id] = setTimeout(async () => {
+      delete pendingIncomeDeletes.current[id];
+      try {
+        const res = await authFetch(`/income/${id}`, { method: "DELETE" });
+        if (!res.ok) throw new Error();
+        onIncomeChange?.();
+      } catch {
+        setDeletedIncomeIds((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+        toast.dismiss(toastId);
+        toast.error("Failed to delete income");
+      }
+    }, 5000);
+  };
+
+  const deleteIncome = () => {
+    if (!editingIncome) return;
+    deleteIncomeById(editingIncome.id);
+    setEditingIncome(null);
+  };
+
   return (
     <div className={`${className} flex-col flex-1 overflow-hidden bg-background`}>
 
@@ -283,6 +370,13 @@ export default function ExpenseTable({ expenses, income = [], className = "", to
         onSave={saveEdit}
         onDelete={deleteExpense}
         onClose={() => setEditingExpense(null)}
+      />
+      <IncomeEditDialog
+        income={editingIncome}
+        categories={incomeCategories}
+        onSave={saveEditIncome}
+        onDelete={deleteIncome}
+        onClose={() => setEditingIncome(null)}
       />
 
       {/* Header */}
@@ -459,7 +553,7 @@ export default function ExpenseTable({ expenses, income = [], className = "", to
         )}
 
         {/* ── Income list (mobile cards + desktop table) ── */}
-        {view === "income" && <IncomeList income={income} />}
+        {view === "income" && <IncomeList income={incomeItems} onEdit={openEditIncome} />}
 
       </div>
       {showScrollToTop && (

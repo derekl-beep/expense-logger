@@ -31,3 +31,46 @@ test("toggles to the Income view and lists seeded income, with the expense-only 
   await expect(visibleText(page, "Dinner at Pasta House")).toBeVisible();
   await expect(visibleText(page, "Payroll Deposit")).toHaveCount(0);
 });
+
+test("opens the edit dialog pre-filled with the income entry's existing details", async ({ page }) => {
+  await page.getByRole("tab", { name: "Income" }).click();
+  await visibleText(page, "Cashback Reward").click();
+
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByText("Edit Income")).toBeVisible();
+  await expect(dialog.locator("input").nth(0)).toHaveValue("Cashback Reward");
+  await expect(dialog.locator('input[type="number"]')).toHaveValue("42.75");
+  await expect(dialog.getByRole("combobox")).toContainText("Rebate");
+});
+
+test("editing an income entry persists after reload", async ({ page }) => {
+  await page.getByRole("tab", { name: "Income" }).click();
+  await visibleText(page, "Cashback Reward").click();
+  const dialog = page.getByRole("dialog");
+  await dialog.locator("input").nth(0).fill("Cashback Reward (edited)");
+  await dialog.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByText("Income updated")).toBeVisible();
+
+  await page.reload();
+  await goToExpensesTab(page);
+  await page.getByRole("tab", { name: "Income" }).click();
+  await expect(visibleText(page, "Cashback Reward (edited)")).toBeVisible();
+
+  // Restore original state so this test doesn't leak into other tests/projects
+  // sharing the same backend (mobile/desktop both hit the same seeded DB).
+  await visibleText(page, "Cashback Reward (edited)").click();
+  await dialog.locator("input").nth(0).fill("Cashback Reward");
+  await dialog.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByText("Income updated")).toBeVisible();
+});
+
+test("deleting an income entry shows an undo toast that restores it", async ({ page }) => {
+  await page.getByRole("tab", { name: "Income" }).click();
+  await visibleText(page, "Cashback Reward").click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: "Delete" }).click();
+  await expect(visibleText(page, "Cashback Reward")).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Undo" }).click();
+  await expect(visibleText(page, "Cashback Reward")).toBeVisible();
+});
