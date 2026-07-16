@@ -119,6 +119,24 @@ _run("""
     )
 """)
 
+# No user_id — a household-shared goal like budgets, not a per-user private
+# one. current_amount is a manually-tracked accumulator ("add $200 to the
+# vacation fund"), deliberately *not* derived from income minus expenses —
+# the household's net cash flow can go negative some months, which would
+# make goal progress swing negative too and mean nothing to a saver who
+# never touched that money.
+_run("""
+    CREATE TABLE IF NOT EXISTS savings_goals (
+        id             SERIAL PRIMARY KEY,
+        name           TEXT NOT NULL,
+        target_amount  NUMERIC(10, 2) NOT NULL,
+        target_date    DATE,
+        current_amount NUMERIC(10, 2) NOT NULL DEFAULT 0,
+        created_at     TIMESTAMPTZ DEFAULT NOW(),
+        deleted_at     TIMESTAMPTZ
+    )
+""")
+
 
 def get_user_by_username(username: str) -> dict | None:
     cur = _run("SELECT * FROM users WHERE username = %s", (username,))
@@ -878,6 +896,62 @@ def set_budget(category: str, monthly_limit: float) -> dict:
 
 def delete_budget(category: str) -> dict:
     _run("DELETE FROM budgets WHERE category = %s", (category,))
+    return {"status": "deleted"}
+
+
+def create_savings_goal(name: str, target_amount: float, target_date: str = None) -> dict:
+    cur = _run(
+        "INSERT INTO savings_goals (name, target_amount, target_date) VALUES (%s, %s, %s) RETURNING id",
+        (name, target_amount, target_date),
+    )
+    return {"status": "created", "id": cur.fetchone()["id"]}
+
+
+def get_savings_goals() -> list[dict]:
+    cur = _run(
+        """
+        SELECT id, name, target_amount, target_date, current_amount
+        FROM savings_goals
+        WHERE deleted_at IS NULL
+        ORDER BY created_at
+        """
+    )
+    goals = []
+    for g in cur.fetchall():
+        row = _row(dict(g))
+        if row["target_date"] is not None:
+            row["target_date"] = str(row["target_date"])
+        row["pct_complete"] = round(min(row["current_amount"] / row["target_amount"], 1) * 100, 1) if row["target_amount"] else 0.0
+        goals.append(row)
+    return goals
+
+
+def contribute_to_savings_goal(id: int, amount: float) -> dict:
+    """Adjust a goal's saved-so-far amount. amount can be negative (a
+    withdrawal); the running total is clipped at 0 either way, since a
+    negative progress bar wouldn't mean anything to a saver."""
+    cur = _run(
+        """
+        UPDATE savings_goals
+        SET current_amount = GREATEST(current_amount + %s, 0)
+        WHERE id = %s AND deleted_at IS NULL
+        RETURNING current_amount
+        """,
+        (amount, id),
+    )
+    row = cur.fetchone()
+    if row is None:
+        return {"status": "error", "message": f"No savings goal with id {id}"}
+    return {"status": "updated", "current_amount": float(row["current_amount"])}
+
+
+def delete_savings_goal(id: int) -> dict:
+    cur = _run(
+        "UPDATE savings_goals SET deleted_at = NOW() WHERE id = %s AND deleted_at IS NULL RETURNING id",
+        (id,),
+    )
+    if cur.fetchone() is None:
+        return {"status": "not_found"}
     return {"status": "deleted"}
 
 

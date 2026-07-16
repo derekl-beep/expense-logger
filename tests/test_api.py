@@ -131,6 +131,22 @@ def test_budgets_crud_via_api(auth_headers):
     assert client.get("/budgets", headers=auth_headers).json() == []
 
 
+# --- savings goals -----------------------------------------------------------
+
+def test_savings_goals_endpoint_requires_auth():
+    assert client.get("/savings-goals").status_code == 401
+
+
+def test_savings_goals_endpoint_returns_created_goals(auth_headers):
+    db.create_savings_goal("Vacation Fund", 1000)
+
+    result = client.get("/savings-goals", headers=auth_headers).json()
+
+    assert len(result) == 1
+    assert result[0]["name"] == "Vacation Fund"
+    assert result[0]["pct_complete"] == 0.0
+
+
 # --- insights ----------------------------------------------------------------
 
 def test_insights_endpoint_omits_categories_with_no_budget(auth_headers, user_id):

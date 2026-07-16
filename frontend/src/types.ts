@@ -42,6 +42,16 @@ export interface Budget {
   monthly_limit: number;
 }
 
+export interface SavingsGoal {
+  id: number;
+  name: string;
+  target_amount: number;
+  // Nullable — a goal can be open-ended, with no date to hit the target by.
+  target_date: string | null;
+  current_amount: number;
+  pct_complete: number;
+}
+
 export interface BreakdownEntry {
   category: string;
   amount: number;

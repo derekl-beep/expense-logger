@@ -24,6 +24,7 @@ from agent.db import (
     get_expenses,
     get_income,
     get_recurring_expenses,
+    get_savings_goals,
     get_user_by_username,
     increment_api_call_count,
     set_budget,
@@ -173,6 +174,11 @@ def set_budget_endpoint(category: str, req: BudgetRequest, user_id: int = Depend
 @app.delete("/budgets/{category}")
 def delete_budget_endpoint(category: str, user_id: int = Depends(get_current_user)):
     return delete_budget(category)
+
+
+@app.get("/savings-goals")
+def savings_goals_endpoint(user_id: int = Depends(get_current_user)):
+    return get_savings_goals()
 
 
 @app.get("/chat/suggestions")
