@@ -708,6 +708,12 @@ _RECURRING_FREQUENCIES = [
     ("yearly", 365, 15),
 ]
 
+# Canonical day-count per frequency label, for projecting the next expected
+# charge date from the last one seen — the classified label, not the group's
+# own (possibly slightly off) avg_gap, since the label is what a human means
+# by "monthly".
+_FREQUENCY_DAYS = {label: days for label, days, _ in _RECURRING_FREQUENCIES}
+
 
 def _classify_frequency(avg_gap_days: float) -> str | None:
     best_label, best_diff = None, None
@@ -752,6 +758,7 @@ def get_recurring_expenses() -> list[dict]:
         frequency = _classify_frequency(avg_gap)
         if not frequency:
             continue
+        next_expected_date = r["last_date"] + timedelta(days=_FREQUENCY_DAYS[frequency])
         results.append({
             "description": r["description"],
             "amount": float(r["amount"]),
@@ -759,6 +766,7 @@ def get_recurring_expenses() -> list[dict]:
             "occurrences": r["occurrences"],
             "last_date": str(r["last_date"]),
             "frequency": frequency,
+            "next_expected_date": str(next_expected_date),
         })
     return results
 
@@ -894,6 +902,37 @@ def get_budget_status(category: str = None, month: str = None) -> list[dict]:
             "over_budget": spent > limit,
         })
     return status
+
+
+# Matches the "near budget" color threshold already used in the frontend
+# (BreakdownRow / BudgetSettings) — an insight is only worth surfacing
+# unprompted once a category is at least this close to its limit.
+INSIGHT_THRESHOLD_PCT = 80
+
+# How many days ahead a recurring charge counts as "coming up" — a reminder
+# further out than this isn't actionable yet and would just be noise.
+UPCOMING_RECURRING_WINDOW_DAYS = 3
+
+
+def get_insights() -> list[dict]:
+    """Proactive, unprompted signals: budget categories at/over threshold, and
+    recurring charges due soon. Each item carries type + key so the frontend
+    can render and dismiss budget vs. recurring insights independently, even
+    when they'd otherwise collide (e.g. two recurring charges in the same
+    category) — key is unique within a single call's result set."""
+    insights = []
+
+    for s in get_budget_status():
+        if s["pct_used"] >= INSIGHT_THRESHOLD_PCT:
+            insights.append({**s, "type": "budget", "key": f"budget:{s['category']}"})
+
+    today = date.today()
+    for r in get_recurring_expenses():
+        days_until = (date.fromisoformat(r["next_expected_date"]) - today).days
+        if 0 <= days_until <= UPCOMING_RECURRING_WINDOW_DAYS:
+            insights.append({**r, "type": "recurring", "days_until": days_until, "key": f"recurring:{r['description']}"})
+
+    return insights
 
 
 def set_budget(category: str, monthly_limit: float) -> dict:
