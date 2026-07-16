@@ -125,6 +125,21 @@ def test_run_tools_returns_error_result_for_failing_handler_and_still_runs_the_r
     assert results[2]["content"] == str({"ok": True})
 
 
+def test_run_tools_reports_failing_handler_to_sentry(monkeypatch):
+    captured = []
+    monkeypatch.setattr(main.sentry_sdk, "capture_exception", lambda: captured.append(True))
+
+    def failing_handler(**kw):
+        raise ValueError("boom")
+
+    monkeypatch.setitem(main.TOOL_HANDLERS, "save_expense", failing_handler)
+    block = make_block("tool_use", name="save_expense", input={"amount": 5}, id="tool_1")
+
+    main._run_tools([block], user_id=1)
+
+    assert captured == [True]
+
+
 # --- _repair_dangling_tool_use ---------------------------------------------
 
 def test_repair_dangling_tool_use_drops_unresolved_trailing_assistant_message():

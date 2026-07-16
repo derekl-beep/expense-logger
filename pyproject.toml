@@ -10,6 +10,7 @@ dependencies = [
     "psycopg2-binary>=2.9.12",
     "python-dotenv>=1.2.2",
     "python-jose[cryptography]>=3.5.0",
+    "sentry-sdk>=2.65.0",
     "uvicorn>=0.49.0",
 ]
 

@@ -4,6 +4,7 @@ import traceback
 from datetime import date
 
 import anthropic
+import sentry_sdk
 from dotenv import load_dotenv
 
 from agent.categories import CATEGORY_HINTS, INCOME_CATEGORY_HINTS
@@ -214,6 +215,7 @@ def _run_tools(response_content: list, user_id: int, on_result=None) -> list:
                 result = TOOL_HANDLERS[block.name](**kwargs)
             except Exception:
                 logger.error("tool %s(%s) failed:\n%s", block.name, kwargs, traceback.format_exc())
+                sentry_sdk.capture_exception()
                 result = {"status": "error", "message": f"{block.name} failed unexpectedly — tell the user and don't retry automatically."}
             print(f"[tool] {block.name}({kwargs}) -> {result}")
             if on_result:
