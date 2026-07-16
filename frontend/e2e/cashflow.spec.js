@@ -6,9 +6,10 @@ import { goToExpensesTab, login } from "./fixtures";
 // income  = 2500.00 + 42.75 + 30.00                                = 2572.75
 // expense = 1850.00 + 142.37 + 38.50 + 9.50 + 54.20 + 210.00 + 120.00
 //         + 310.00 + 89.99 + 12.50 + 22.00 + 15.99 + 60.00 (e2e_test)
-//         + 9.99 (e2e_housemate's Cloud Storage)                   = 2945.04
-// net = 2572.75 - 2945.04 = -372.29
-const EXPECTED_NET = "-$372.29";
+//         + 9.99 (e2e_housemate's Cloud Storage)
+//         + 45.00 * 3 (recurring Gym Membership pattern)           = 3080.04
+// net = 2572.75 - 3080.04 = -507.29
+const EXPECTED_NET = "-$507.29";
 
 test.beforeEach(async ({ page }) => {
   await login(page);

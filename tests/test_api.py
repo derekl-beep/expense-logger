@@ -168,6 +168,19 @@ def test_insights_endpoint_includes_category_at_exactly_the_threshold(auth_heade
     assert result[0]["pct_used"] == 80.0
 
 
+def test_insights_endpoint_includes_a_recurring_charge_due_soon(auth_headers, user_id):
+    from datetime import date, timedelta
+    for offset in (87, 57, 27):
+        day = (date.today() - timedelta(days=offset)).isoformat()
+        add_expense(user_id, 45, "Subscription", "Gym Membership", day)
+
+    result = client.get("/insights", headers=auth_headers).json()
+
+    assert len(result) == 1
+    assert result[0]["type"] == "recurring"
+    assert result[0]["description"] == "Gym Membership"
+
+
 # --- update/delete expense --------------------------------------------------
 
 def test_update_expense_with_invalid_category_returns_422(auth_headers, user_id):
