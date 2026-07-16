@@ -7,6 +7,7 @@ import traceback
 from datetime import date
 from pathlib import Path
 
+import sentry_sdk
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
@@ -36,6 +37,16 @@ from agent.tools import COMMAND_PROMPTS, SUGGESTED_PROMPTS
 from api.auth import create_token, get_current_user, get_current_username, verify_password
 
 logger = logging.getLogger(__name__)
+
+# Error monitoring — a no-op until SENTRY_DSN is set (sentry_sdk.init(dsn=None)
+# disables the SDK entirely, so this is safe to leave unconfigured in dev/CI).
+# Error capture only, no performance tracing — that's a separate cost/scope
+# this app doesn't need yet. send_default_pii is explicitly off: the SDK
+# auto-instruments the anthropic client, and every Claude call here carries
+# real expense/income descriptions — that must never leave this app for a
+# third party, on top of the SYSTEM prompt/user messages being sensitive on
+# their own.
+sentry_sdk.init(dsn=os.environ.get("SENTRY_DSN"), traces_sample_rate=0.0, send_default_pii=False)
 
 DAILY_CALL_LIMIT = int(os.environ.get("DAILY_CALL_LIMIT", 50))
 
@@ -110,6 +121,7 @@ def chat_stream_endpoint(
                 yield f"data: {json.dumps(event)}\n\n"
         except Exception:
             logger.error("stream_chat error:\n%s", traceback.format_exc())
+            sentry_sdk.capture_exception()
             yield f"data: {json.dumps({'error': 'Something went wrong. Please try again.'})}\n\n"
         yield "data: [DONE]\n\n"
 

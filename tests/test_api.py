@@ -302,6 +302,21 @@ def test_chat_stream_endpoint_reports_error_on_exception(monkeypatch, auth_heade
     assert "data: [DONE]" in response.text
 
 
+def test_chat_stream_endpoint_reports_exception_to_sentry(monkeypatch, auth_headers):
+    captured = []
+    monkeypatch.setattr(server.sentry_sdk, "capture_exception", lambda: captured.append(True))
+
+    def fake_stream_chat(message, user_id, username, images):
+        raise RuntimeError("boom")
+        yield  # pragma: no cover — makes this a generator, never reached
+
+    monkeypatch.setattr(server, "stream_chat", fake_stream_chat)
+
+    client.post("/chat/stream", json={"message": "hi"}, headers=auth_headers)
+
+    assert captured == [True]
+
+
 # --- check_rate_limit --------------------------------------------------
 
 def test_check_rate_limit_allows_calls_under_limit(user_id):
