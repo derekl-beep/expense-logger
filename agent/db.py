@@ -136,6 +136,20 @@ _run("""
 
 _run("CREATE INDEX IF NOT EXISTS usage_events_name_idx ON usage_events (event_name)")
 
+# Chat session history, externalized from the in-process dict it used to
+# live in (agent/main.py's old _sessions) — that dict silently dropped every
+# in-progress conversation on every redeploy/restart, since nothing survived
+# process memory. One row per user; the whole message list is replaced on
+# every save rather than appended in SQL, since the caller always has the
+# full up-to-date list in hand already.
+_run("""
+    CREATE TABLE IF NOT EXISTS chat_sessions (
+        user_id    INTEGER PRIMARY KEY REFERENCES users(id),
+        messages   JSONB NOT NULL DEFAULT '[]',
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+""")
+
 
 def get_user_by_username(username: str) -> dict | None:
     cur = _run("SELECT * FROM users WHERE username = %s", (username,))
@@ -928,6 +942,26 @@ def record_usage(user_id: int | None, event_type: str, event_name: str, source: 
         )
     except Exception:
         pass
+
+
+def load_chat_session(user_id: int) -> list:
+    cur = _run("SELECT messages FROM chat_sessions WHERE user_id = %s", (user_id,))
+    row = cur.fetchone()
+    return row["messages"] if row else []
+
+
+def save_chat_session(user_id: int, messages: list) -> None:
+    _run(
+        """
+        INSERT INTO chat_sessions (user_id, messages, updated_at) VALUES (%s, %s, NOW())
+        ON CONFLICT (user_id) DO UPDATE SET messages = EXCLUDED.messages, updated_at = NOW()
+        """,
+        (user_id, psycopg2.extras.Json(messages)),
+    )
+
+
+def clear_chat_session(user_id: int) -> None:
+    _run("DELETE FROM chat_sessions WHERE user_id = %s", (user_id,))
 
 
 def get_usage_summary(since: str | None = None) -> list[dict]:

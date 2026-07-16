@@ -222,13 +222,12 @@ def test_expenses_export_returns_csv(auth_headers, user_id):
 # --- chat/clear -------------------------------------------------------------
 
 def test_chat_clear_endpoint(auth_headers, user_id):
-    from agent import main
-    main._sessions[str(user_id)] = [{"role": "user", "content": "hi"}]
+    db.save_chat_session(user_id, [{"role": "user", "content": "hi"}])
 
     response = client.post("/chat/clear", headers=auth_headers)
 
     assert response.status_code == 200
-    assert str(user_id) not in main._sessions
+    assert db.load_chat_session(user_id) == []
 
 
 # --- /chat, /chat/stream wiring (mocked agent layer) ------------------------
