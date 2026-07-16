@@ -288,7 +288,7 @@ export default function Chat({ onExpenseChange, className = "", token, username,
     setImages((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const sendMessage = async (text, displayText = null) => {
+  const sendMessage = async (text, displayText = null, source = null) => {
     if (!text || loading) return;
     if (!hasOnboarded) {
       localStorage.setItem(onboardedKey, "1");
@@ -338,6 +338,7 @@ export default function Chat({ onExpenseChange, className = "", token, username,
           images: attachedImages.length
             ? attachedImages.map((img) => ({ data: img.data, media_type: img.mediaType }))
             : null,
+          source,
         }),
         signal: controller.signal,
       });
@@ -404,7 +405,7 @@ export default function Chat({ onExpenseChange, className = "", token, username,
 
   const runCommand = (cmd) => {
     setInput("");
-    sendMessage(cmd.prompt, cmd.label);
+    sendMessage(cmd.prompt, cmd.label, `command:${cmd.command}`);
   };
 
   const send = () => {
@@ -430,7 +431,8 @@ export default function Chat({ onExpenseChange, className = "", token, username,
     const start = `${year}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
     sendMessage(
       `Summarize my expenses from ${start} to today. Show a breakdown by category with amounts, a total, and one observation about my spending.`,
-      `Summarize ${month} ${year}`
+      `Summarize ${month} ${year}`,
+      "chip:monthly_summary"
     );
   };
 
@@ -643,7 +645,7 @@ export default function Chat({ onExpenseChange, className = "", token, username,
             {suggestions.map((s) => (
               <button
                 key={s.label}
-                onClick={() => sendMessage(s.prompt, s.label)}
+                onClick={() => sendMessage(s.prompt, s.label, `chip:${s.label}`)}
                 className="text-xs px-3 py-1.5 rounded-full border border-input text-foreground hover:bg-muted transition-colors"
               >
                 {s.label}

@@ -26,6 +26,7 @@ from agent.db import (
     get_recurring_expenses,
     get_user_by_username,
     increment_api_call_count,
+    record_usage,
     set_budget,
     update_expense,
     update_income,
@@ -85,6 +86,12 @@ class ImageInput(BaseModel):
 class ChatRequest(BaseModel):
     message: str
     images: list[ImageInput] | None = None
+    # Where this message came from — a suggested chip, a slash command, or
+    # freeform typing (default). Lets usage reporting tell "clicked /budget"
+    # apart from "typed the same words", which look identical server-side
+    # otherwise. Frontend-supplied and unvalidated (analytics only, never
+    # used for auth/business logic), so no enum constraint here.
+    source: str | None = None
 
 
 def _images_payload(req: ChatRequest) -> list[dict] | None:
@@ -99,7 +106,7 @@ def chat_stream_endpoint(
 ):
     def generate():
         try:
-            for event in stream_chat(req.message, user_id, username, _images_payload(req)):
+            for event in stream_chat(req.message, user_id, username, _images_payload(req), req.source):
                 yield f"data: {json.dumps(event)}\n\n"
         except Exception:
             logger.error("stream_chat error:\n%s", traceback.format_exc())
@@ -167,11 +174,13 @@ def insights_endpoint(user_id: int = Depends(get_current_user)):
 
 @app.put("/budgets/{category}")
 def set_budget_endpoint(category: str, req: BudgetRequest, user_id: int = Depends(get_current_user)):
+    record_usage(user_id, "ui", "set_budget")
     return set_budget(category, req.monthly_limit)
 
 
 @app.delete("/budgets/{category}")
 def delete_budget_endpoint(category: str, user_id: int = Depends(get_current_user)):
+    record_usage(user_id, "ui", "delete_budget")
     return delete_budget(category)
 
 
@@ -202,6 +211,7 @@ class UpdateRequest(BaseModel):
 
 @app.patch("/expenses/{id}")
 def update_expense_endpoint(id: int, req: UpdateRequest, user_id: int = Depends(get_current_user)):
+    record_usage(user_id, "ui", "update_expense")
     result = update_expense(id, req.amount, req.category, req.description, req.date, req.flagged)
     if result.get("status") == "not_found":
         raise HTTPException(status_code=404, detail="Expense not found")
@@ -210,6 +220,7 @@ def update_expense_endpoint(id: int, req: UpdateRequest, user_id: int = Depends(
 
 @app.delete("/expenses/{id}")
 def delete_expense_endpoint(id: int, user_id: int = Depends(get_current_user)):
+    record_usage(user_id, "ui", "delete_expense")
     result = delete_expense(id)
     if result.get("status") == "not_found":
         raise HTTPException(status_code=404, detail="Expense not found")
@@ -232,6 +243,7 @@ class IncomeUpdateRequest(BaseModel):
 
 @app.patch("/income/{id}")
 def update_income_endpoint(id: int, req: IncomeUpdateRequest, user_id: int = Depends(get_current_user)):
+    record_usage(user_id, "ui", "update_income")
     result = update_income(id, req.amount, req.category, req.description, req.date)
     if result.get("status") == "not_found":
         raise HTTPException(status_code=404, detail="Income entry not found")
@@ -240,6 +252,7 @@ def update_income_endpoint(id: int, req: IncomeUpdateRequest, user_id: int = Dep
 
 @app.delete("/income/{id}")
 def delete_income_endpoint(id: int, user_id: int = Depends(get_current_user)):
+    record_usage(user_id, "ui", "delete_income")
     result = delete_income(id)
     if result.get("status") == "not_found":
         raise HTTPException(status_code=404, detail="Income entry not found")
@@ -248,6 +261,7 @@ def delete_income_endpoint(id: int, user_id: int = Depends(get_current_user)):
 
 @app.get("/expenses/export")
 def expenses_export(user_id: int = Depends(get_current_user)):
+    record_usage(user_id, "ui", "export_csv")
     rows = get_expenses()
     output = io.StringIO()
     writer = csv.DictWriter(
