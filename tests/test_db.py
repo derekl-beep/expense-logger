@@ -910,3 +910,45 @@ def test_increment_api_call_count_is_per_day(user_id):
     db.increment_api_call_count(user_id, "2026-06-28")
     assert db.get_api_call_count(user_id, "2026-06-27") == 1
     assert db.get_api_call_count(user_id, "2026-06-28") == 1
+
+
+# --- usage_events / record_usage -------------------------------------------
+
+def test_record_usage_appears_in_summary(user_id):
+    db.record_usage(user_id, "tool", "save_expense", "freeform")
+
+    summary = db.get_usage_summary()
+
+    assert summary == [{"event_type": "tool", "event_name": "save_expense", "source": "freeform", "count": 1}]
+
+
+def test_get_usage_summary_groups_by_type_name_and_source(user_id):
+    db.record_usage(user_id, "tool", "save_expense", "freeform")
+    db.record_usage(user_id, "tool", "save_expense", "freeform")
+    db.record_usage(user_id, "tool", "save_expense", "chip:Summarize this month")
+    db.record_usage(user_id, "ui", "delete_expense", None)
+
+    summary = db.get_usage_summary()
+
+    counts = {(row["event_type"], row["event_name"], row["source"]): row["count"] for row in summary}
+    assert counts[("tool", "save_expense", "freeform")] == 2
+    assert counts[("tool", "save_expense", "chip:Summarize this month")] == 1
+    assert counts[("ui", "delete_expense", None)] == 1
+
+
+def test_get_usage_summary_since_filters_out_older_events(user_id):
+    db.record_usage(user_id, "tool", "save_expense", "freeform")
+    db._run("UPDATE usage_events SET created_at = '2026-01-01' WHERE event_name = 'save_expense'")
+    db.record_usage(user_id, "ui", "delete_expense", None)
+
+    summary = db.get_usage_summary(since="2026-06-01")
+
+    names = {row["event_name"] for row in summary}
+    assert names == {"delete_expense"}
+
+
+def test_record_usage_swallows_errors_instead_of_raising():
+    # A nonexistent user_id violates the FK constraint — record_usage must not
+    # propagate that, since a logging failure should never break the request
+    # it's attached to (e.g. a tool call that otherwise succeeded).
+    db.record_usage(999999, "tool", "save_expense", "freeform")

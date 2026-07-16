@@ -6,6 +6,7 @@ from datetime import date
 import anthropic
 from dotenv import load_dotenv
 
+from agent import db
 from agent.categories import CATEGORY_HINTS, INCOME_CATEGORY_HINTS
 from agent.tools import TOOL_DEFINITIONS, TOOL_HANDLERS
 
@@ -192,7 +193,7 @@ def _build_user_content(user_input: str, images: list[dict] | None) -> str:
     return "\n\n".join(parts)
 
 
-def _run_tools(response_content: list, user_id: int, on_result=None) -> list:
+def _run_tools(response_content: list, user_id: int, on_result=None, source: str | None = None) -> list:
     # Every tool_use block below MUST produce a tool_result, even if the
     # handler raises. The assistant message containing these tool_use blocks
     # is already appended to the persistent session history by the caller
@@ -215,6 +216,7 @@ def _run_tools(response_content: list, user_id: int, on_result=None) -> list:
             except Exception:
                 logger.error("tool %s(%s) failed:\n%s", block.name, kwargs, traceback.format_exc())
                 result = {"status": "error", "message": f"{block.name} failed unexpectedly — tell the user and don't retry automatically."}
+            db.record_usage(user_id, "tool", block.name, source)
             print(f"[tool] {block.name}({kwargs}) -> {result}")
             if on_result:
                 on_result(block.name, result)
@@ -230,7 +232,7 @@ def clear_session(user_id: int) -> None:
     _sessions.pop(str(user_id), None)
 
 
-def chat(user_input: str, user_id: int, username: str = "user", images: list[dict] | None = None) -> str:
+def chat(user_input: str, user_id: int, username: str = "user", images: list[dict] | None = None, source: str | None = None) -> str:
     messages = _sessions.setdefault(str(user_id), [])
     _repair_dangling_tool_use(messages)
     content = _build_user_content(user_input, images)
@@ -260,11 +262,11 @@ def chat(user_input: str, user_id: int, username: str = "user", images: list[dic
                     return block.text
 
         if response.stop_reason == "tool_use":
-            tool_results = _run_tools(response.content, user_id)
+            tool_results = _run_tools(response.content, user_id, source=source)
             messages.append({"role": "user", "content": tool_results})
 
 
-def stream_chat(user_input: str, user_id: int, username: str = "user", images: list[dict] | None = None):
+def stream_chat(user_input: str, user_id: int, username: str = "user", images: list[dict] | None = None, source: str | None = None):
     messages = _sessions.setdefault(str(user_id), [])
     _repair_dangling_tool_use(messages)
     if images:
@@ -320,7 +322,7 @@ def stream_chat(user_input: str, user_id: int, username: str = "user", images: l
                 if name == "get_category_breakdown":
                     rich_events.append({"breakdown": result})
 
-            tool_results = _run_tools(final.content, user_id, on_result=_capture_rich_result)
+            tool_results = _run_tools(final.content, user_id, on_result=_capture_rich_result, source=source)
             messages.append({"role": "user", "content": tool_results})
             yield from rich_events
 

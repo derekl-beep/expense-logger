@@ -119,6 +119,23 @@ _run("""
     )
 """)
 
+# Append-only usage log for feature/command adoption reporting (see
+# scripts/usage_report.py) — deliberately no event payload beyond a
+# structural name/source, never message content or expense/income
+# descriptions, since this is financial household data.
+_run("""
+    CREATE TABLE IF NOT EXISTS usage_events (
+        id         SERIAL PRIMARY KEY,
+        user_id    INTEGER REFERENCES users(id),
+        event_type TEXT NOT NULL,
+        event_name TEXT NOT NULL,
+        source     TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+""")
+
+_run("CREATE INDEX IF NOT EXISTS usage_events_name_idx ON usage_events (event_name)")
+
 
 def get_user_by_username(username: str) -> dict | None:
     cur = _run("SELECT * FROM users WHERE username = %s", (username,))
@@ -898,3 +915,41 @@ def increment_api_call_count(user_id: int, date: str) -> None:
         """,
         (user_id, date),
     )
+
+
+def record_usage(user_id: int | None, event_type: str, event_name: str, source: str | None = None) -> None:
+    """Best-effort usage logging — never let a logging failure break the
+    actual request it's attached to (an edit/delete/tool-call succeeding
+    is what matters; the analytics record is secondary)."""
+    try:
+        _run(
+            "INSERT INTO usage_events (user_id, event_type, event_name, source) VALUES (%s, %s, %s, %s)",
+            (user_id, event_type, event_name, source),
+        )
+    except Exception:
+        pass
+
+
+def get_usage_summary(since: str | None = None) -> list[dict]:
+    """Event counts grouped by type/name/source, for scripts/usage_report.py."""
+    if since:
+        cur = _run(
+            """
+            SELECT event_type, event_name, source, COUNT(*) AS count
+            FROM usage_events
+            WHERE created_at >= %s
+            GROUP BY event_type, event_name, source
+            ORDER BY count DESC
+            """,
+            (since,),
+        )
+    else:
+        cur = _run(
+            """
+            SELECT event_type, event_name, source, COUNT(*) AS count
+            FROM usage_events
+            GROUP BY event_type, event_name, source
+            ORDER BY count DESC
+            """
+        )
+    return [dict(r) for r in cur.fetchall()]

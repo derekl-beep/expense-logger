@@ -65,7 +65,7 @@ def _today_minus(days: int) -> str:
 
 
 def seed():
-    _run("TRUNCATE expenses, income, budgets, users, api_calls RESTART IDENTITY CASCADE")
+    _run("TRUNCATE expenses, income, budgets, users, api_calls, usage_events RESTART IDENTITY CASCADE")
 
     create_user(E2E_USERNAME, bcrypt.hashpw(E2E_PASSWORD.encode(), bcrypt.gensalt()).decode())
     cur = _run("SELECT id FROM users WHERE username = %s", (E2E_USERNAME,))
