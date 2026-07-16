@@ -64,8 +64,18 @@ def _today_minus(days: int) -> str:
     return (date.today() - timedelta(days=clamped)).isoformat()
 
 
+def _days_ago(days: int) -> str:
+    """Unclamped days back from today — for recurring-pattern seed data,
+    where get_recurring_expenses() looks across all-time history regardless
+    of month, so the current-month clamp _today_minus applies would break
+    the fixed gap a recurring pattern needs to be detected at all."""
+    from datetime import date, timedelta
+
+    return (date.today() - timedelta(days=days)).isoformat()
+
+
 def seed():
-    _run("TRUNCATE expenses, income, budgets, users, api_calls RESTART IDENTITY CASCADE")
+    _run("TRUNCATE expenses, income, budgets, users, api_calls, usage_events RESTART IDENTITY CASCADE")
 
     create_user(E2E_USERNAME, bcrypt.hashpw(E2E_PASSWORD.encode(), bcrypt.gensalt()).decode())
     cur = _run("SELECT id FROM users WHERE username = %s", (E2E_USERNAME,))
@@ -97,6 +107,15 @@ def seed():
     ]
     for amount, category, description, day in expenses:
         save_expense(amount, category, description, day, user_id=user_id)
+
+    # A monthly recurring pattern whose next charge is due soon, for the
+    # proactive "renews in N days" insight — needs 3+ occurrences at a
+    # consistent ~30-day gap, unrelated to any other spec's category/budget
+    # assertions (Subscription has no budget configured), so unclamped
+    # _days_ago is used instead of _today_minus (which would break the fixed
+    # gap by clamping older occurrences to the 1st of the current month).
+    for day in (_days_ago(87), _days_ago(57), _days_ago(27)):
+        save_expense(45.00, "Subscription", "Gym Membership", day, user_id=user_id)
 
     # Income: kept small and distinct from every expense description so e2e
     # assertions can't accidentally match the wrong list.

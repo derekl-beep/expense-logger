@@ -185,15 +185,16 @@ export default function Chat({ onExpenseChange, className = "", token, username,
     fetch("/chat/commands").then((r) => r.json()).then(setCommands).catch(() => {});
   }, []);
 
-  // Proactive budget insights: a calm, dismissible note (not a modal, not an
-  // agent message — no LLM call involved) for categories at or near their
-  // monthly limit. Dismissal is per-category and remembered for the day, not
-  // forever, so acknowledging one still-relevant warning doesn't hide a
-  // different category's warning, and neither vanishes once and never comes
-  // back.
+  // Proactive insights: a calm, dismissible note (not a modal, not an agent
+  // message — no LLM call involved) for budget categories at/near their
+  // monthly limit, and recurring charges due in the next few days. Dismissal
+  // is per-item (keyed by the server-provided `key`, unique across both
+  // insight types) and remembered for the day, not forever, so acknowledging
+  // one still-relevant warning doesn't hide a different one, and neither
+  // vanishes once and never comes back.
   const [insights, setInsights] = useState([]);
   const insightsDismissKey = `insights_dismissed_${username}_${localDateString()}`;
-  const [dismissedCategories, setDismissedCategories] = useState(() => {
+  const [dismissedKeys, setDismissedKeys] = useState(() => {
     try {
       return new Set(JSON.parse(localStorage.getItem(insightsDismissKey) || "[]"));
     } catch {
@@ -208,11 +209,11 @@ export default function Chat({ onExpenseChange, className = "", token, username,
       .catch(() => {});
   }, [token]);
 
-  const visibleInsights = insights.filter((i) => !dismissedCategories.has(i.category));
+  const visibleInsights = insights.filter((i) => !dismissedKeys.has(i.key));
 
-  const dismissInsight = (category) => {
-    setDismissedCategories((prev) => {
-      const next = new Set(prev).add(category);
+  const dismissInsight = (key) => {
+    setDismissedKeys((prev) => {
+      const next = new Set(prev).add(key);
       try {
         localStorage.setItem(insightsDismissKey, JSON.stringify([...next]));
       } catch {
@@ -288,7 +289,7 @@ export default function Chat({ onExpenseChange, className = "", token, username,
     setImages((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const sendMessage = async (text, displayText = null) => {
+  const sendMessage = async (text, displayText = null, source = null) => {
     if (!text || loading) return;
     if (!hasOnboarded) {
       localStorage.setItem(onboardedKey, "1");
@@ -338,6 +339,7 @@ export default function Chat({ onExpenseChange, className = "", token, username,
           images: attachedImages.length
             ? attachedImages.map((img) => ({ data: img.data, media_type: img.mediaType }))
             : null,
+          source,
         }),
         signal: controller.signal,
       });
@@ -404,7 +406,7 @@ export default function Chat({ onExpenseChange, className = "", token, username,
 
   const runCommand = (cmd) => {
     setInput("");
-    sendMessage(cmd.prompt, cmd.label);
+    sendMessage(cmd.prompt, cmd.label, `command:${cmd.command}`);
   };
 
   const send = () => {
@@ -430,7 +432,8 @@ export default function Chat({ onExpenseChange, className = "", token, username,
     const start = `${year}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
     sendMessage(
       `Summarize my expenses from ${start} to today. Show a breakdown by category with amounts, a total, and one observation about my spending.`,
-      `Summarize ${month} ${year}`
+      `Summarize ${month} ${year}`,
+      "chip:monthly_summary"
     );
   };
 
@@ -548,16 +551,26 @@ export default function Chat({ onExpenseChange, className = "", token, username,
             </div>
             <div className="flex-1 min-w-0 space-y-1">
               {visibleInsights.map((i) => (
-                <div key={i.category} className="flex items-start gap-2">
+                <div key={i.key} className="flex items-start gap-2">
                   <p className="flex-1 text-xs text-foreground leading-relaxed">
-                    <span className={`font-semibold ${i.over_budget ? "text-red-600 dark:text-red-400" : "text-amber-600 dark:text-amber-400"}`}>
-                      {i.category}
-                    </span>
-                    {" "}is at {i.pct_used.toFixed(0)}% of budget (${i.spent.toFixed(0)} of ${i.monthly_limit.toFixed(0)})
+                    {i.type === "recurring" ? (
+                      <>
+                        <span className="font-semibold text-foreground">{i.description}</span>
+                        {" "}(${i.amount.toFixed(2)}) renews{" "}
+                        {i.days_until === 0 ? "today" : i.days_until === 1 ? "tomorrow" : `in ${i.days_until} days`}
+                      </>
+                    ) : (
+                      <>
+                        <span className={`font-semibold ${i.over_budget ? "text-red-600 dark:text-red-400" : "text-amber-600 dark:text-amber-400"}`}>
+                          {i.category}
+                        </span>
+                        {" "}is at {i.pct_used.toFixed(0)}% of budget (${i.spent.toFixed(0)} of ${i.monthly_limit.toFixed(0)})
+                      </>
+                    )}
                   </p>
                   <button
-                    onClick={() => dismissInsight(i.category)}
-                    aria-label={`Dismiss ${i.category} budget insight`}
+                    onClick={() => dismissInsight(i.key)}
+                    aria-label={i.type === "recurring" ? `Dismiss ${i.description} reminder` : `Dismiss ${i.category} budget insight`}
                     className="shrink-0 text-muted-foreground hover:text-foreground text-sm leading-none"
                   >×</button>
                 </div>
@@ -643,7 +656,7 @@ export default function Chat({ onExpenseChange, className = "", token, username,
             {suggestions.map((s) => (
               <button
                 key={s.label}
-                onClick={() => sendMessage(s.prompt, s.label)}
+                onClick={() => sendMessage(s.prompt, s.label, `chip:${s.label}`)}
                 className="text-xs px-3 py-1.5 rounded-full border border-input text-foreground hover:bg-muted transition-colors"
               >
                 {s.label}

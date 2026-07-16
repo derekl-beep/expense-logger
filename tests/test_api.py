@@ -168,6 +168,19 @@ def test_insights_endpoint_includes_category_at_exactly_the_threshold(auth_heade
     assert result[0]["pct_used"] == 80.0
 
 
+def test_insights_endpoint_includes_a_recurring_charge_due_soon(auth_headers, user_id):
+    from datetime import date, timedelta
+    for offset in (87, 57, 27):
+        day = (date.today() - timedelta(days=offset)).isoformat()
+        add_expense(user_id, 45, "Subscription", "Gym Membership", day)
+
+    result = client.get("/insights", headers=auth_headers).json()
+
+    assert len(result) == 1
+    assert result[0]["type"] == "recurring"
+    assert result[0]["description"] == "Gym Membership"
+
+
 # --- update/delete expense --------------------------------------------------
 
 def test_update_expense_with_invalid_category_returns_422(auth_headers, user_id):
@@ -222,20 +235,19 @@ def test_expenses_export_returns_csv(auth_headers, user_id):
 # --- chat/clear -------------------------------------------------------------
 
 def test_chat_clear_endpoint(auth_headers, user_id):
-    from agent import main
-    main._sessions[str(user_id)] = [{"role": "user", "content": "hi"}]
+    db.save_chat_session(user_id, [{"role": "user", "content": "hi"}])
 
     response = client.post("/chat/clear", headers=auth_headers)
 
     assert response.status_code == 200
-    assert str(user_id) not in main._sessions
+    assert db.load_chat_session(user_id) == []
 
 
 # --- /chat, /chat/stream wiring (mocked agent layer) ------------------------
 
 
 def test_chat_stream_endpoint_streams_chunks(monkeypatch, auth_headers):
-    def fake_stream_chat(message, user_id, username, images):
+    def fake_stream_chat(message, user_id, username, images, source):
         yield {"text": "Hello"}
         yield {"text": " world"}
 
@@ -249,7 +261,7 @@ def test_chat_stream_endpoint_streams_chunks(monkeypatch, auth_headers):
 
 
 def test_chat_stream_endpoint_forwards_tool_status_events(monkeypatch, auth_headers):
-    def fake_stream_chat(message, user_id, username, images):
+    def fake_stream_chat(message, user_id, username, images, source):
         yield {"status": "Saving expense…"}
         yield {"text": "Done!"}
 
@@ -262,8 +274,22 @@ def test_chat_stream_endpoint_forwards_tool_status_events(monkeypatch, auth_head
     assert "Saving expense" in response.text
 
 
+def test_chat_stream_endpoint_forwards_source_to_stream_chat(monkeypatch, auth_headers):
+    captured = {}
+
+    def fake_stream_chat(message, user_id, username, images, source):
+        captured["source"] = source
+        yield {"text": "ok"}
+
+    monkeypatch.setattr(server, "stream_chat", fake_stream_chat)
+
+    client.post("/chat/stream", json={"message": "hi", "source": "command:/budget"}, headers=auth_headers)
+
+    assert captured["source"] == "command:/budget"
+
+
 def test_chat_stream_endpoint_reports_error_on_exception(monkeypatch, auth_headers):
-    def fake_stream_chat(message, user_id, username, images):
+    def fake_stream_chat(message, user_id, username, images, source):
         yield {"text": "partial"}
         raise RuntimeError("boom")
 

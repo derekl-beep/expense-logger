@@ -119,6 +119,37 @@ _run("""
     )
 """)
 
+# Append-only usage log for feature/command adoption reporting (see
+# scripts/usage_report.py) — deliberately no event payload beyond a
+# structural name/source, never message content or expense/income
+# descriptions, since this is financial household data.
+_run("""
+    CREATE TABLE IF NOT EXISTS usage_events (
+        id         SERIAL PRIMARY KEY,
+        user_id    INTEGER REFERENCES users(id),
+        event_type TEXT NOT NULL,
+        event_name TEXT NOT NULL,
+        source     TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+""")
+
+_run("CREATE INDEX IF NOT EXISTS usage_events_name_idx ON usage_events (event_name)")
+
+# Chat session history, externalized from the in-process dict it used to
+# live in (agent/main.py's old _sessions) — that dict silently dropped every
+# in-progress conversation on every redeploy/restart, since nothing survived
+# process memory. One row per user; the whole message list is replaced on
+# every save rather than appended in SQL, since the caller always has the
+# full up-to-date list in hand already.
+_run("""
+    CREATE TABLE IF NOT EXISTS chat_sessions (
+        user_id    INTEGER PRIMARY KEY REFERENCES users(id),
+        messages   JSONB NOT NULL DEFAULT '[]',
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+""")
+
 
 def get_user_by_username(username: str) -> dict | None:
     cur = _run("SELECT * FROM users WHERE username = %s", (username,))
@@ -677,6 +708,12 @@ _RECURRING_FREQUENCIES = [
     ("yearly", 365, 15),
 ]
 
+# Canonical day-count per frequency label, for projecting the next expected
+# charge date from the last one seen — the classified label, not the group's
+# own (possibly slightly off) avg_gap, since the label is what a human means
+# by "monthly".
+_FREQUENCY_DAYS = {label: days for label, days, _ in _RECURRING_FREQUENCIES}
+
 
 def _classify_frequency(avg_gap_days: float) -> str | None:
     best_label, best_diff = None, None
@@ -721,6 +758,7 @@ def get_recurring_expenses() -> list[dict]:
         frequency = _classify_frequency(avg_gap)
         if not frequency:
             continue
+        next_expected_date = r["last_date"] + timedelta(days=_FREQUENCY_DAYS[frequency])
         results.append({
             "description": r["description"],
             "amount": float(r["amount"]),
@@ -728,6 +766,7 @@ def get_recurring_expenses() -> list[dict]:
             "occurrences": r["occurrences"],
             "last_date": str(r["last_date"]),
             "frequency": frequency,
+            "next_expected_date": str(next_expected_date),
         })
     return results
 
@@ -865,6 +904,37 @@ def get_budget_status(category: str = None, month: str = None) -> list[dict]:
     return status
 
 
+# Matches the "near budget" color threshold already used in the frontend
+# (BreakdownRow / BudgetSettings) — an insight is only worth surfacing
+# unprompted once a category is at least this close to its limit.
+INSIGHT_THRESHOLD_PCT = 80
+
+# How many days ahead a recurring charge counts as "coming up" — a reminder
+# further out than this isn't actionable yet and would just be noise.
+UPCOMING_RECURRING_WINDOW_DAYS = 3
+
+
+def get_insights() -> list[dict]:
+    """Proactive, unprompted signals: budget categories at/over threshold, and
+    recurring charges due soon. Each item carries type + key so the frontend
+    can render and dismiss budget vs. recurring insights independently, even
+    when they'd otherwise collide (e.g. two recurring charges in the same
+    category) — key is unique within a single call's result set."""
+    insights = []
+
+    for s in get_budget_status():
+        if s["pct_used"] >= INSIGHT_THRESHOLD_PCT:
+            insights.append({**s, "type": "budget", "key": f"budget:{s['category']}"})
+
+    today = date.today()
+    for r in get_recurring_expenses():
+        days_until = (date.fromisoformat(r["next_expected_date"]) - today).days
+        if 0 <= days_until <= UPCOMING_RECURRING_WINDOW_DAYS:
+            insights.append({**r, "type": "recurring", "days_until": days_until, "key": f"recurring:{r['description']}"})
+
+    return insights
+
+
 def set_budget(category: str, monthly_limit: float) -> dict:
     _run(
         """
@@ -898,3 +968,61 @@ def increment_api_call_count(user_id: int, date: str) -> None:
         """,
         (user_id, date),
     )
+
+
+def record_usage(user_id: int | None, event_type: str, event_name: str, source: str | None = None) -> None:
+    """Best-effort usage logging — never let a logging failure break the
+    actual request it's attached to (an edit/delete/tool-call succeeding
+    is what matters; the analytics record is secondary)."""
+    try:
+        _run(
+            "INSERT INTO usage_events (user_id, event_type, event_name, source) VALUES (%s, %s, %s, %s)",
+            (user_id, event_type, event_name, source),
+        )
+    except Exception:
+        pass
+
+
+def load_chat_session(user_id: int) -> list:
+    cur = _run("SELECT messages FROM chat_sessions WHERE user_id = %s", (user_id,))
+    row = cur.fetchone()
+    return row["messages"] if row else []
+
+
+def save_chat_session(user_id: int, messages: list) -> None:
+    _run(
+        """
+        INSERT INTO chat_sessions (user_id, messages, updated_at) VALUES (%s, %s, NOW())
+        ON CONFLICT (user_id) DO UPDATE SET messages = EXCLUDED.messages, updated_at = NOW()
+        """,
+        (user_id, psycopg2.extras.Json(messages)),
+    )
+
+
+def clear_chat_session(user_id: int) -> None:
+    _run("DELETE FROM chat_sessions WHERE user_id = %s", (user_id,))
+
+
+def get_usage_summary(since: str | None = None) -> list[dict]:
+    """Event counts grouped by type/name/source, for scripts/usage_report.py."""
+    if since:
+        cur = _run(
+            """
+            SELECT event_type, event_name, source, COUNT(*) AS count
+            FROM usage_events
+            WHERE created_at >= %s
+            GROUP BY event_type, event_name, source
+            ORDER BY count DESC
+            """,
+            (since,),
+        )
+    else:
+        cur = _run(
+            """
+            SELECT event_type, event_name, source, COUNT(*) AS count
+            FROM usage_events
+            GROUP BY event_type, event_name, source
+            ORDER BY count DESC
+            """
+        )
+    return [dict(r) for r in cur.fetchall()]
