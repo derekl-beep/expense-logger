@@ -51,7 +51,15 @@ def _ensure_database_exists():
 
 _ensure_database_exists()
 
-from agent.db import _run, create_user, save_expense, save_income, set_budget  # noqa: E402
+from agent.db import (  # noqa: E402
+    _run,
+    contribute_to_savings_goal,
+    create_savings_goal,
+    create_user,
+    save_expense,
+    save_income,
+    set_budget,
+)
 
 
 def _today_minus(days: int) -> str:
@@ -75,7 +83,7 @@ def _days_ago(days: int) -> str:
 
 
 def seed():
-    _run("TRUNCATE expenses, income, budgets, users, api_calls, usage_events RESTART IDENTITY CASCADE")
+    _run("TRUNCATE expenses, income, budgets, users, api_calls, savings_goals, usage_events RESTART IDENTITY CASCADE")
 
     create_user(E2E_USERNAME, bcrypt.hashpw(E2E_PASSWORD.encode(), bcrypt.gensalt()).decode())
     cur = _run("SELECT id FROM users WHERE username = %s", (E2E_USERNAME,))
@@ -139,6 +147,10 @@ def seed():
     cur = _run("SELECT id FROM users WHERE username = %s", (E2E_HOUSEMATE_USERNAME,))
     housemate_id = cur.fetchone()["id"]
     save_expense(9.99, "Subscription", "Cloud Storage", _today_minus(1), user_id=housemate_id)
+
+    # A savings goal partway to its target, for the Savings Goals section.
+    goal = create_savings_goal("Vacation Fund", 3000, target_date="2026-12-25")
+    contribute_to_savings_goal(goal["id"], 750)
 
 
 if __name__ == "__main__":

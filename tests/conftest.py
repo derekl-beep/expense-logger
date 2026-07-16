@@ -11,7 +11,7 @@ from agent import db  # noqa: E402  (must import after DATABASE_URL is set — d
 
 @pytest.fixture(autouse=True)
 def clean_db():
-    db._run("TRUNCATE expenses, income, budgets, users, api_calls, usage_events, chat_sessions RESTART IDENTITY CASCADE")
+    db._run("TRUNCATE expenses, income, budgets, users, api_calls, savings_goals, usage_events, chat_sessions RESTART IDENTITY CASCADE")
     yield
 
 

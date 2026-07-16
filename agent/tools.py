@@ -1,8 +1,11 @@
 from agent.categories import CATEGORIES, INCOME_CATEGORIES
 from agent.db import (
+    contribute_to_savings_goal,
+    create_savings_goal,
     delete_budget,
     delete_expense,
     delete_income,
+    delete_savings_goal,
     find_similar_expenses,
     get_average_transaction,
     get_budget_status,
@@ -12,6 +15,7 @@ from agent.db import (
     get_monthly_trend,
     get_recurring_expenses,
     get_run_rate,
+    get_savings_goals,
     get_top_expenses,
     get_user_breakdown,
     get_weekday_pattern,
@@ -335,6 +339,51 @@ TOOL_DEFINITIONS = [
             "required": ["category"],
         },
     },
+    {
+        "name": "create_savings_goal",
+        "description": "Create a new savings goal (e.g. 'save $3000 for a trip by December'). This is a household-shared goal, separate from budgets — it tracks money manually set aside toward a target, not spending.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name":          {"type": "string", "description": "Short name for the goal, e.g. 'Vacation Fund'"},
+                "target_amount": {"type": "number", "description": "Target amount in dollars"},
+                "target_date":   {"type": "string", "description": "ISO date the goal is aimed for, if the user gave one — omit if open-ended"},
+            },
+            "required": ["name", "target_amount"],
+        },
+    },
+    {
+        "name": "get_savings_goals",
+        "description": "List all active savings goals with their target, amount saved so far, and percent complete. Use for 'how's my vacation fund doing' / 'what are my savings goals' questions.",
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    {
+        "name": "contribute_to_savings_goal",
+        "description": "Add (or, with a negative amount, withdraw) money from a goal's saved-so-far total — e.g. 'put $200 toward my vacation fund'. First call get_savings_goals to find the right id if it's not already known from context. This does not create an expense or income entry; it's a separate running total.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "id":     {"type": "integer", "description": "The savings goal's id"},
+                "amount": {"type": "number", "description": "Amount in dollars to add; negative to withdraw"},
+            },
+            "required": ["id", "amount"],
+        },
+    },
+    {
+        "name": "delete_savings_goal",
+        "description": "Delete a savings goal — e.g. the user finished it or no longer wants to track it. First call get_savings_goals to find the id.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "id": {"type": "integer", "description": "The savings goal's id to delete"},
+            },
+            "required": ["id"],
+        },
+    },
 ]
 
 TOOL_HANDLERS = {
@@ -361,6 +410,10 @@ TOOL_HANDLERS = {
     "get_budget_status":      get_budget_status,
     "set_budget":             set_budget,
     "delete_budget":          delete_budget,
+    "create_savings_goal":    create_savings_goal,
+    "get_savings_goals":      get_savings_goals,
+    "contribute_to_savings_goal": contribute_to_savings_goal,
+    "delete_savings_goal":    delete_savings_goal,
 }
 
 # Example prompts shown as chips in a fresh chat — one per analytics tool above,
@@ -393,4 +446,5 @@ COMMAND_PROMPTS = [
     {"command": "/weekday", "label": "Weekday pattern", "prompt": "What days of the week do I spend the most on?", "tool": "get_weekday_pattern"},
     {"command": "/average", "label": "Average transaction", "prompt": "What's my average transaction amount?", "tool": "get_average_transaction"},
     {"command": "/budget", "label": "Budget status", "prompt": "Am I over budget on anything this month?", "tool": "get_budget_status"},
+    {"command": "/goals", "label": "Savings goals", "prompt": "How are my savings goals doing?", "tool": "get_savings_goals"},
 ]

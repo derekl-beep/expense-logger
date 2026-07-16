@@ -33,3 +33,9 @@ def test_save_income_and_get_income_are_registered():
 def test_link_income_to_expense_is_registered():
     assert "link_income_to_expense" in TOOL_HANDLERS
     assert "link_income_to_expense" in {t["name"] for t in TOOL_DEFINITIONS}
+
+
+def test_savings_goal_tools_are_registered():
+    names = {"create_savings_goal", "get_savings_goals", "contribute_to_savings_goal", "delete_savings_goal"}
+    assert names <= set(TOOL_HANDLERS)
+    assert names <= {t["name"] for t in TOOL_DEFINITIONS}

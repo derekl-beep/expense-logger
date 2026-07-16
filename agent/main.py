@@ -56,6 +56,13 @@ For budget questions (e.g. "am I over budget", "how much do I have left for groc
 To set or change a monthly limit (e.g. "set my dining budget to $400"), call set_budget. To remove a budget entirely, call delete_budget.
 get_budget_status's spent figure is net of any linked reimbursements (see Logging income) — a $60 expense with a $30 linked reimbursement counts as $30 spent, reflecting the expense's own month regardless of when the reimbursement was recorded or linked. This differs from get_category_breakdown, get_monthly_trend, and the other historical-spend tools below, which always report the gross amount actually paid. If a user notices the numbers don't match for the same category/month, explain the difference rather than guessing one of them is wrong.
 
+## Savings goals
+Savings goals are separate from budgets — a budget is a monthly spending limit; a goal is money manually set aside toward a target (e.g. "save $3000 for a trip by December"), tracked as its own running total, not derived from income or expenses.
+To create one, call create_savings_goal. To check progress ("how's my vacation fund doing"), call get_savings_goals and report the amount saved, target, and percent complete exactly as returned.
+To add money toward a goal (e.g. "put $200 toward my vacation fund"), call contribute_to_savings_goal with a positive amount; use a negative amount if the user says they're taking money back out. First call get_savings_goals to find the right id if it isn't already known from context (e.g. just created in this conversation).
+To remove a goal entirely, first call get_savings_goals to find the id, then call delete_savings_goal.
+Logging or editing an expense/income entry never affects a savings goal, and contributing to a goal never creates an expense or income entry — don't call save_expense/save_income for a goal contribution, and don't call contribute_to_savings_goal just because an expense or income entry was logged.
+
 ## Editing and flagging
 save_expense returns the new expense's id. If you need to immediately update the just-saved expense (e.g. flag it), use that id directly with update_expense — never call get_expenses to find it.
 For all other edits and flags, call get_expenses to find the right record first, then call update_expense.
@@ -64,7 +71,7 @@ Flagging marks an expense for follow-up (flagged=true). Unflagging clears it (fl
 
 Income entries can be edited too. save_income returns the new income entry's id — use that id directly with update_income if editing immediately after saving, otherwise call get_income first to find the right id. update_income never changes an entry's reimbursement link (reimburses_expense_id); if the user wants to change what an income entry reimburses, use link_income_to_expense instead (see Logging income).
 
-There are five tools split cleanly by table: update_expense and delete_expense only ever operate on expenses; update_income, delete_income, and link_income_to_expense only ever operate on income. Expense ids and income ids are separate sequences that collide (e.g. expense id 7 and income id 7 can both exist and refer to unrelated rows) — never pass an id you got from get_expenses or save_expense as the income_id/id argument to update_income, delete_income, or link_income_to_expense, and never pass an id you got from get_income or save_income as the id argument to update_expense or delete_expense.
+There are five tools split cleanly by table: update_expense and delete_expense only ever operate on expenses; update_income, delete_income, and link_income_to_expense only ever operate on income. Expense ids and income ids are separate sequences that collide (e.g. expense id 7 and income id 7 can both exist and refer to unrelated rows) — never pass an id you got from get_expenses or save_expense as the income_id/id argument to update_income, delete_income, or link_income_to_expense, and never pass an id you got from get_income or save_income as the id argument to update_expense or delete_expense. Savings goal ids (from create_savings_goal/get_savings_goals) are yet another separate sequence — never pass one as an expense or income id, or vice versa.
 
 ## Receipt / screenshot scanning
 When the user's message contains extracted text from one or more images (prefixed with "[Extracted text from image...]"), parse each block for expense line items. Read dates and amounts exactly as shown — do not approximate. For category, use your best judgement.
@@ -131,6 +138,10 @@ TOOL_STATUS_LABELS = {
     "delete_budget": "Removing budget…",
     "get_average_transaction": "Calculating average…",
     "get_recurring_expenses": "Checking recurring charges…",
+    "create_savings_goal": "Creating savings goal…",
+    "get_savings_goals": "Checking savings goals…",
+    "contribute_to_savings_goal": "Updating savings goal…",
+    "delete_savings_goal": "Removing savings goal…",
 }
 
 

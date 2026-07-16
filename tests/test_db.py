@@ -31,6 +31,102 @@ def test_get_budgets_ordered_alphabetically():
     assert [b["category"] for b in db.get_budgets()] == ["Dining", "Travel"]
 
 
+# --- savings goals -----------------------------------------------------
+
+def test_create_and_get_savings_goal():
+    result = db.create_savings_goal("Vacation Fund", 3000)
+    assert result["status"] == "created"
+
+    goals = db.get_savings_goals()
+    assert len(goals) == 1
+    assert goals[0]["id"] == result["id"]
+    assert goals[0]["name"] == "Vacation Fund"
+    assert goals[0]["target_amount"] == 3000.0
+    assert goals[0]["current_amount"] == 0.0
+    assert goals[0]["target_date"] is None
+    assert goals[0]["pct_complete"] == 0.0
+
+
+def test_create_savings_goal_with_target_date():
+    db.create_savings_goal("Vacation Fund", 3000, target_date="2026-12-25")
+    assert db.get_savings_goals()[0]["target_date"] == "2026-12-25"
+
+
+def test_contribute_to_savings_goal_increases_current_amount():
+    goal = db.create_savings_goal("Vacation Fund", 1000)
+
+    result = db.contribute_to_savings_goal(goal["id"], 200)
+
+    assert result["status"] == "updated"
+    assert result["current_amount"] == 200.0
+    goals = db.get_savings_goals()
+    assert goals[0]["current_amount"] == 200.0
+    assert goals[0]["pct_complete"] == 20.0
+
+
+def test_contribute_negative_amount_withdraws():
+    goal = db.create_savings_goal("Vacation Fund", 1000)
+    db.contribute_to_savings_goal(goal["id"], 200)
+
+    result = db.contribute_to_savings_goal(goal["id"], -50)
+
+    assert result["current_amount"] == 150.0
+
+
+def test_contribute_clips_at_zero_instead_of_going_negative():
+    goal = db.create_savings_goal("Vacation Fund", 1000)
+    db.contribute_to_savings_goal(goal["id"], 50)
+
+    result = db.contribute_to_savings_goal(goal["id"], -200)
+
+    assert result["current_amount"] == 0.0
+
+
+def test_contribute_to_nonexistent_goal_returns_error():
+    result = db.contribute_to_savings_goal(999999, 50)
+    assert result["status"] == "error"
+
+
+def test_pct_complete_caps_at_100_when_overfunded():
+    goal = db.create_savings_goal("Vacation Fund", 1000)
+    db.contribute_to_savings_goal(goal["id"], 1500)
+
+    assert db.get_savings_goals()[0]["pct_complete"] == 100.0
+
+
+def test_delete_savings_goal_is_soft_delete():
+    goal = db.create_savings_goal("Vacation Fund", 1000)
+
+    result = db.delete_savings_goal(goal["id"])
+
+    assert result["status"] == "deleted"
+    assert db.get_savings_goals() == []
+    # Row survives with deleted_at set, not hard-deleted.
+    cur = db._run("SELECT deleted_at FROM savings_goals WHERE id = %s", (goal["id"],))
+    assert cur.fetchone()["deleted_at"] is not None
+
+
+def test_delete_savings_goal_twice_returns_not_found_second_time():
+    goal = db.create_savings_goal("Vacation Fund", 1000)
+    db.delete_savings_goal(goal["id"])
+
+    assert db.delete_savings_goal(goal["id"])["status"] == "not_found"
+
+
+def test_contribute_to_deleted_goal_returns_error():
+    goal = db.create_savings_goal("Vacation Fund", 1000)
+    db.delete_savings_goal(goal["id"])
+
+    assert db.contribute_to_savings_goal(goal["id"], 50)["status"] == "error"
+
+
+def test_get_savings_goals_ordered_by_creation():
+    db.create_savings_goal("First Goal", 100)
+    db.create_savings_goal("Second Goal", 200)
+
+    assert [g["name"] for g in db.get_savings_goals()] == ["First Goal", "Second Goal"]
+
+
 # --- save_expense / duplicate detection ---------------------------------
 
 def test_save_expense_basic(user_id):

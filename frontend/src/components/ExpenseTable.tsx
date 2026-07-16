@@ -11,7 +11,8 @@ import ExpenseList from "@/components/ExpenseList";
 import IncomeList from "@/components/IncomeList";
 import CategoryBreakdown from "@/components/CategoryBreakdown";
 import RecurringSection from "@/components/RecurringSection";
-import type { AuthFetch, Budget, EditValues, Expense, Income, IncomeEditValues, RecurringCharge } from "@/types";
+import SavingsGoalsSection from "@/components/SavingsGoalsSection";
+import type { AuthFetch, Budget, EditValues, Expense, Income, IncomeEditValues, RecurringCharge, SavingsGoal } from "@/types";
 
 export interface ExpenseTableProps {
   expenses: Expense[];
@@ -80,6 +81,7 @@ export default function ExpenseTable({ expenses, income = [], className = "", to
   const [incomeCategories, setIncomeCategories] = useState<string[]>([]);
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [recurring, setRecurring] = useState<RecurringCharge[]>([]);
+  const [savingsGoals, setSavingsGoals] = useState<SavingsGoal[]>([]);
   const [overrides, setOverrides] = useState<Record<number, Partial<Expense>>>({});
   const [deletedIds, setDeletedIds] = useState<Set<number>>(() => new Set());
   const [incomeOverrides, setIncomeOverrides] = useState<Record<number, Partial<Income>>>({});
@@ -120,6 +122,7 @@ export default function ExpenseTable({ expenses, income = [], className = "", to
   useEffect(() => {
     fetchBudgets();
     authFetch("/expenses/recurring").then((r) => r.json()).then(setRecurring);
+    authFetch("/savings-goals").then((r) => r.json()).then(setSavingsGoals);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -526,6 +529,9 @@ export default function ExpenseTable({ expenses, income = [], className = "", to
             onToggleShowAllCategories={() => setShowAllCategories((v) => !v)}
           />
         )}
+
+        {/* ── Savings goals ── */}
+        {view === "expenses" && <SavingsGoalsSection goals={savingsGoals} />}
 
         {/* ── Recurring charges ── */}
         {view === "expenses" && (

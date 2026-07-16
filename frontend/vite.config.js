@@ -19,6 +19,7 @@ export default defineConfig({
       '/categories': 'http://localhost:8000',
       '/budgets': 'http://localhost:8000',
       '/insights': 'http://localhost:8000',
+      '/savings-goals': 'http://localhost:8000',
       '/health': 'http://localhost:8000',
     },
   },
