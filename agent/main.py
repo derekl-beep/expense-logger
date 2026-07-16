@@ -1,11 +1,13 @@
 import logging
 import os
+import threading
 import traceback
 from datetime import date
 
 import anthropic
 from dotenv import load_dotenv
 
+from agent import db
 from agent.categories import CATEGORY_HINTS, INCOME_CATEGORY_HINTS
 from agent.tools import TOOL_DEFINITIONS, TOOL_HANDLERS
 
@@ -82,8 +84,26 @@ To delete an income entry, first call get_income to find the ID, then call delet
 {category_hints}"""
 
 
-# Conversation history keyed by user_id.
-_sessions: dict[str, list] = {}
+# Conversation history is persisted in Postgres (agent/db.py's chat_sessions
+# table), not kept in process memory — an in-memory dict here used to drop
+# every in-progress conversation on every redeploy/restart. One lock per
+# user_id serializes that user's own concurrent requests (e.g. a double-tap,
+# or two tabs) around the load -> mutate -> save round trip, so one request's
+# save can't silently clobber another's; this only guards same-instance
+# concurrency, which is the actual deployment today — true cross-instance
+# locking would need a DB-level lock and isn't worth it at this scale yet.
+_session_locks: dict[str, threading.Lock] = {}
+_session_locks_guard = threading.Lock()
+
+
+def _get_session_lock(user_id: int) -> threading.Lock:
+    key = str(user_id)
+    with _session_locks_guard:
+        if key not in _session_locks:
+            _session_locks[key] = threading.Lock()
+        return _session_locks[key]
+
+
 HISTORY_LIMIT = 30   # max messages passed to the API per turn
 _SESSION_CAP = 120   # trim stored history once it exceeds this to prevent unbounded growth
 API_TIMEOUT = 120.0  # seconds before giving up on a Claude API call
@@ -131,20 +151,35 @@ def _trim_session(messages: list) -> None:
         messages[:] = messages[-HISTORY_LIMIT:]
 
 
+def _serialize_block(block) -> dict:
+    """Normalize one response content block to a plain JSON-serializable
+    dict. In production this is always an Anthropic SDK pydantic object
+    (has model_dump()); test doubles use plain dicts or SimpleNamespace.
+    Required both to persist assistant turns to Postgres and to keep
+    _repair_dangling_tool_use's dict-style access correct now that history
+    can come from a DB reload rather than always being this process's own
+    freshly-returned API response."""
+    if isinstance(block, dict):
+        return block
+    if hasattr(block, "model_dump"):
+        return block.model_dump()
+    return dict(vars(block))
+
+
 def _repair_dangling_tool_use(messages: list) -> None:
     """Drop a trailing assistant tool_use turn that never got its tool_result
     appended. This can only happen from a session that was corrupted by a
     since-fixed bug (a tool handler exception used to abort _run_tools before
-    it appended the matching tool_result) — but since _sessions lives only in
-    memory, any session already in that broken state stays broken forever
-    without this: every future turn would keep failing the same way, since
+    it appended the matching tool_result) — but since sessions are persisted,
+    any session already in that broken state stays broken forever without
+    this: every future turn would keep failing the same way, since
     Anthropic's API rejects a tool_use block with no following tool_result.
     Safe going forward too, in case some other future bug reintroduces the
     same failure mode."""
     if not messages:
         return
     last = messages[-1]
-    if last.get("role") == "assistant" and any(getattr(b, "type", None) == "tool_use" for b in last.get("content", [])):
+    if last.get("role") == "assistant" and any(b.get("type") == "tool_use" for b in last.get("content", [])):
         messages.pop()
 
 
@@ -203,7 +238,7 @@ def _build_user_content(user_input: str, images: list[dict] | None) -> str:
     return "\n\n".join(parts)
 
 
-def _run_tools(response_content: list, user_id: int, on_result=None) -> list:
+def _run_tools(response_content: list, user_id: int, on_result=None, source: str | None = None) -> list:
     # Every tool_use block below MUST produce a tool_result, even if the
     # handler raises. The assistant message containing these tool_use blocks
     # is already appended to the persistent session history by the caller
@@ -226,6 +261,7 @@ def _run_tools(response_content: list, user_id: int, on_result=None) -> list:
             except Exception:
                 logger.error("tool %s(%s) failed:\n%s", block.name, kwargs, traceback.format_exc())
                 result = {"status": "error", "message": f"{block.name} failed unexpectedly — tell the user and don't retry automatically."}
+            db.record_usage(user_id, "tool", block.name, source)
             print(f"[tool] {block.name}({kwargs}) -> {result}")
             if on_result:
                 on_result(block.name, result)
@@ -238,102 +274,110 @@ def _run_tools(response_content: list, user_id: int, on_result=None) -> list:
 
 
 def clear_session(user_id: int) -> None:
-    _sessions.pop(str(user_id), None)
+    db.clear_chat_session(user_id)
 
 
-def chat(user_input: str, user_id: int, username: str = "user", images: list[dict] | None = None) -> str:
-    messages = _sessions.setdefault(str(user_id), [])
-    _repair_dangling_tool_use(messages)
-    content = _build_user_content(user_input, images)
-    _append_user_turn(messages, content)
-    _trim_session(messages)
+def chat(user_input: str, user_id: int, username: str = "user", images: list[dict] | None = None, source: str | None = None) -> str:
+    with _get_session_lock(user_id):
+        messages = db.load_chat_session(user_id)
+        _repair_dangling_tool_use(messages)
+        content = _build_user_content(user_input, images)
+        _append_user_turn(messages, content)
+        _trim_session(messages)
+        db.save_chat_session(user_id, messages)
 
-    while True:
-        response = client.messages.create(
-            model=MODEL_DEFAULT,
-            max_tokens=2048,
-            timeout=API_TIMEOUT,
-            system=SYSTEM.format(
-                today=date.today().isoformat(),
-                username=username,
-                category_hints=CATEGORY_HINTS,
-                income_category_hints=INCOME_CATEGORY_HINTS,
-            ),
-            tools=TOOL_DEFINITIONS,
-            messages=messages[-HISTORY_LIMIT:],
-        )
+        while True:
+            response = client.messages.create(
+                model=MODEL_DEFAULT,
+                max_tokens=2048,
+                timeout=API_TIMEOUT,
+                system=SYSTEM.format(
+                    today=date.today().isoformat(),
+                    username=username,
+                    category_hints=CATEGORY_HINTS,
+                    income_category_hints=INCOME_CATEGORY_HINTS,
+                ),
+                tools=TOOL_DEFINITIONS,
+                messages=messages[-HISTORY_LIMIT:],
+            )
 
-        messages.append({"role": "assistant", "content": response.content})
+            messages.append({"role": "assistant", "content": [_serialize_block(b) for b in response.content]})
+            db.save_chat_session(user_id, messages)
 
-        if response.stop_reason == "end_turn":
-            for block in response.content:
-                if hasattr(block, "text"):
-                    return block.text
+            if response.stop_reason == "end_turn":
+                for block in response.content:
+                    if hasattr(block, "text"):
+                        return block.text
 
-        if response.stop_reason == "tool_use":
-            tool_results = _run_tools(response.content, user_id)
-            messages.append({"role": "user", "content": tool_results})
+            if response.stop_reason == "tool_use":
+                tool_results = _run_tools(response.content, user_id, source=source)
+                messages.append({"role": "user", "content": tool_results})
+                db.save_chat_session(user_id, messages)
 
 
-def stream_chat(user_input: str, user_id: int, username: str = "user", images: list[dict] | None = None):
-    messages = _sessions.setdefault(str(user_id), [])
-    _repair_dangling_tool_use(messages)
-    if images:
-        yield {"status": "Reading image…" if len(images) == 1 else "Reading images…"}
-    content = _build_user_content(user_input, images)
-    _append_user_turn(messages, content)
-    _trim_session(messages)
+def stream_chat(user_input: str, user_id: int, username: str = "user", images: list[dict] | None = None, source: str | None = None):
+    with _get_session_lock(user_id):
+        messages = db.load_chat_session(user_id)
+        _repair_dangling_tool_use(messages)
+        if images:
+            yield {"status": "Reading image…" if len(images) == 1 else "Reading images…"}
+        content = _build_user_content(user_input, images)
+        _append_user_turn(messages, content)
+        _trim_session(messages)
+        db.save_chat_session(user_id, messages)
 
-    last_char = ""
-    while True:
-        with client.messages.stream(
-            model=MODEL_DEFAULT,
-            max_tokens=2048,
-            timeout=API_TIMEOUT,
-            system=SYSTEM.format(
-                today=date.today().isoformat(),
-                username=username,
-                category_hints=CATEGORY_HINTS,
-                income_category_hints=INCOME_CATEGORY_HINTS,
-            ),
-            tools=TOOL_DEFINITIONS,
-            messages=messages[-HISTORY_LIMIT:],
-        ) as stream:
-            first_chunk_of_turn = True
-            for chunk in stream.text_stream:
-                if not chunk:
-                    continue
-                # Each turn streams independently, so the model can end one turn
-                # with "...today." and start the next (post-tool_use) with "Done!"
-                # with no space in between. Only check at the turn boundary —
-                # chunks within a single turn are exact slices of one continuous
-                # string and always join up correctly on their own.
-                if first_chunk_of_turn and last_char and not last_char.isspace() and not chunk[0].isspace():
-                    yield {"text": " "}
-                yield {"text": chunk}
-                last_char = chunk[-1]
-                first_chunk_of_turn = False
-            final = stream.get_final_message()
+        last_char = ""
+        while True:
+            with client.messages.stream(
+                model=MODEL_DEFAULT,
+                max_tokens=2048,
+                timeout=API_TIMEOUT,
+                system=SYSTEM.format(
+                    today=date.today().isoformat(),
+                    username=username,
+                    category_hints=CATEGORY_HINTS,
+                    income_category_hints=INCOME_CATEGORY_HINTS,
+                ),
+                tools=TOOL_DEFINITIONS,
+                messages=messages[-HISTORY_LIMIT:],
+            ) as stream:
+                first_chunk_of_turn = True
+                for chunk in stream.text_stream:
+                    if not chunk:
+                        continue
+                    # Each turn streams independently, so the model can end one turn
+                    # with "...today." and start the next (post-tool_use) with "Done!"
+                    # with no space in between. Only check at the turn boundary —
+                    # chunks within a single turn are exact slices of one continuous
+                    # string and always join up correctly on their own.
+                    if first_chunk_of_turn and last_char and not last_char.isspace() and not chunk[0].isspace():
+                        yield {"text": " "}
+                    yield {"text": chunk}
+                    last_char = chunk[-1]
+                    first_chunk_of_turn = False
+                final = stream.get_final_message()
 
-        messages.append({"role": "assistant", "content": final.content})
+            messages.append({"role": "assistant", "content": [_serialize_block(b) for b in final.content]})
+            db.save_chat_session(user_id, messages)
 
-        if final.stop_reason == "end_turn":
-            break
+            if final.stop_reason == "end_turn":
+                break
 
-        if final.stop_reason == "tool_use":
-            for block in final.content:
-                if block.type == "tool_use":
-                    yield {"status": TOOL_STATUS_LABELS.get(block.name, "Working…")}
+            if final.stop_reason == "tool_use":
+                for block in final.content:
+                    if block.type == "tool_use":
+                        yield {"status": TOOL_STATUS_LABELS.get(block.name, "Working…")}
 
-            rich_events = []
+                rich_events = []
 
-            def _capture_rich_result(name, result):
-                if name == "get_category_breakdown":
-                    rich_events.append({"breakdown": result})
+                def _capture_rich_result(name, result):
+                    if name == "get_category_breakdown":
+                        rich_events.append({"breakdown": result})
 
-            tool_results = _run_tools(final.content, user_id, on_result=_capture_rich_result)
-            messages.append({"role": "user", "content": tool_results})
-            yield from rich_events
+                tool_results = _run_tools(final.content, user_id, on_result=_capture_rich_result, source=source)
+                messages.append({"role": "user", "content": tool_results})
+                db.save_chat_session(user_id, messages)
+                yield from rich_events
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 import types
 
-from agent import main
+from agent import db, main
 
 
 def make_block(type_, **kwargs):
@@ -125,12 +125,48 @@ def test_run_tools_returns_error_result_for_failing_handler_and_still_runs_the_r
     assert results[2]["content"] == str({"ok": True})
 
 
+# --- _serialize_block --------------------------------------------------------
+# Required for persisting assistant turns to Postgres — a live Anthropic SDK
+# response block in production, but test doubles are plain dicts or
+# SimpleNamespace, so this must handle all three shapes.
+
+def test_serialize_block_passes_through_plain_dicts():
+    block = {"type": "text", "text": "hi"}
+    assert main._serialize_block(block) is block
+
+
+def test_serialize_block_uses_model_dump_when_available():
+    class FakeSdkBlock:
+        def model_dump(self):
+            return {"type": "tool_use", "id": "t1", "name": "save_expense", "input": {}}
+
+    assert main._serialize_block(FakeSdkBlock()) == {"type": "tool_use", "id": "t1", "name": "save_expense", "input": {}}
+
+
+def test_serialize_block_falls_back_to_vars_for_simplenamespace():
+    block = make_block("text", text="hi")
+    assert main._serialize_block(block) == {"type": "text", "text": "hi"}
+
+
+# --- _get_session_lock --------------------------------------------------------
+
+def test_get_session_lock_returns_same_lock_for_same_user_id():
+    assert main._get_session_lock(123) is main._get_session_lock(123)
+
+
+def test_get_session_lock_returns_different_locks_for_different_user_ids():
+    assert main._get_session_lock(123) is not main._get_session_lock(456)
+
+
 # --- _repair_dangling_tool_use ---------------------------------------------
+# Content blocks here are plain dicts, not make_block()/SimpleNamespace —
+# that's what messages actually contain once persisted (see _serialize_block
+# above), and what _repair_dangling_tool_use's dict-style access expects.
 
 def test_repair_dangling_tool_use_drops_unresolved_trailing_assistant_message():
     messages = [
         {"role": "user", "content": "log $5 coffee"},
-        {"role": "assistant", "content": [make_block("tool_use", name="save_expense", input={}, id="tool_1")]},
+        {"role": "assistant", "content": [{"type": "tool_use", "name": "save_expense", "input": {}, "id": "tool_1"}]},
     ]
 
     main._repair_dangling_tool_use(messages)
@@ -141,7 +177,7 @@ def test_repair_dangling_tool_use_drops_unresolved_trailing_assistant_message():
 def test_repair_dangling_tool_use_leaves_resolved_history_untouched():
     messages = [
         {"role": "user", "content": "log $5 coffee"},
-        {"role": "assistant", "content": [make_block("tool_use", name="save_expense", input={}, id="tool_1")]},
+        {"role": "assistant", "content": [{"type": "tool_use", "name": "save_expense", "input": {}, "id": "tool_1"}]},
         {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "tool_1", "content": "{}"}]},
     ]
     original = list(messages)
@@ -154,7 +190,7 @@ def test_repair_dangling_tool_use_leaves_resolved_history_untouched():
 def test_repair_dangling_tool_use_leaves_plain_text_turn_untouched():
     messages = [
         {"role": "user", "content": "hi"},
-        {"role": "assistant", "content": [make_block("text", text="Hello!")]},
+        {"role": "assistant", "content": [{"type": "text", "text": "Hello!"}]},
     ]
     original = list(messages)
 
@@ -170,7 +206,7 @@ def test_repair_dangling_tool_use_on_empty_session_is_a_noop():
 # --- _append_user_turn ------------------------------------------------------
 
 def test_append_user_turn_appends_after_an_assistant_message():
-    messages = [{"role": "assistant", "content": [make_block("text", text="hi")]}]
+    messages = [{"role": "assistant", "content": [{"type": "text", "text": "hi"}]}]
 
     main._append_user_turn(messages, "new message")
 
@@ -221,18 +257,18 @@ def test_append_user_turn_merges_into_a_trailing_tool_results_list_too():
     }]
 
 
-def test_chat_self_heals_a_session_corrupted_mid_multi_round_tool_use(monkeypatch):
+def test_chat_self_heals_a_session_corrupted_mid_multi_round_tool_use(monkeypatch, user_id_factory):
     # The realistic shape of the reported bug: round 1 (lookups) resolved
     # normally, round 2 (saves) is where a handler crashed, leaving a
     # dangling assistant message whose *preceding* user message is a
     # tool_results list from round 1, not a plain string.
-    main.clear_session(10)
-    main._sessions["10"] = [
+    uid = user_id_factory()
+    db.save_chat_session(uid, [
         {"role": "user", "content": "log these 16 transactions"},
-        {"role": "assistant", "content": [make_block("tool_use", name="find_similar_expense", input={}, id="lookup_1")]},
+        {"role": "assistant", "content": [{"type": "tool_use", "name": "find_similar_expense", "input": {}, "id": "lookup_1"}]},
         {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "lookup_1", "content": "[]"}]},
-        {"role": "assistant", "content": [make_block("tool_use", name="save_expense", input={}, id="tool_orphan")]},
-    ]
+        {"role": "assistant", "content": [{"type": "tool_use", "name": "save_expense", "input": {}, "id": "tool_orphan"}]},
+    ])
     captured = {}
 
     def fake_create(**kw):
@@ -241,7 +277,7 @@ def test_chat_self_heals_a_session_corrupted_mid_multi_round_tool_use(monkeypatc
 
     monkeypatch.setattr(main.client.messages, "create", fake_create)
 
-    result = main.chat("try again", user_id=10)
+    result = main.chat("try again", user_id=uid)
 
     assert result == "Logged it"
     sent = captured["messages"]
@@ -249,7 +285,7 @@ def test_chat_self_heals_a_session_corrupted_mid_multi_round_tool_use(monkeypatc
     assert sent[-1]["content"][-1] == {"type": "text", "text": "try again"}
 
 
-def test_chat_self_heals_a_session_corrupted_by_the_old_bug(monkeypatch):
+def test_chat_self_heals_a_session_corrupted_by_the_old_bug(monkeypatch, user_id_factory):
     # Simulates a session left over from before _run_tools caught handler
     # exceptions: an assistant tool_use turn with no tool_result ever
     # appended after it, which used to make every future turn fail with
@@ -257,11 +293,11 @@ def test_chat_self_heals_a_session_corrupted_by_the_old_bug(monkeypatch):
     # forever. chat() must drop that dangling turn before sending history,
     # and must not just trade that error for a role-alternation error by
     # leaving two consecutive user messages behind.
-    main.clear_session(9)
-    main._sessions["9"] = [
+    uid = user_id_factory()
+    db.save_chat_session(uid, [
         {"role": "user", "content": "log these 16 transactions"},
-        {"role": "assistant", "content": [make_block("tool_use", name="save_expense", input={}, id="tool_orphan")]},
-    ]
+        {"role": "assistant", "content": [{"type": "tool_use", "name": "save_expense", "input": {}, "id": "tool_orphan"}]},
+    ])
     captured = {}
 
     def fake_create(**kw):
@@ -270,15 +306,15 @@ def test_chat_self_heals_a_session_corrupted_by_the_old_bug(monkeypatch):
 
     monkeypatch.setattr(main.client.messages, "create", fake_create)
 
-    result = main.chat("try again", user_id=9)
+    result = main.chat("try again", user_id=uid)
 
     assert result == "Logged it"
     sent = captured["messages"]
     # The orphaned assistant tool_use message must not be in what gets sent.
     sent_ids = [
-        b.id for m in sent if m["role"] == "assistant"
+        b["id"] for m in sent if m["role"] == "assistant"
         for b in (m["content"] if isinstance(m["content"], list) else [])
-        if getattr(b, "type", None) == "tool_use"
+        if b.get("type") == "tool_use"
     ]
     assert "tool_orphan" not in sent_ids
     # Roles must strictly alternate — no two consecutive same-role messages.
@@ -289,30 +325,33 @@ def test_chat_self_heals_a_session_corrupted_by_the_old_bug(monkeypatch):
 
 # --- clear_session ---------------------------------------------------------
 
-def test_clear_session_removes_history():
-    main._sessions["7"] = [{"role": "user", "content": "hi"}]
-    main.clear_session(7)
-    assert "7" not in main._sessions
+def test_clear_session_removes_history(user_id_factory):
+    uid = user_id_factory()
+    db.save_chat_session(uid, [{"role": "user", "content": "hi"}])
+
+    main.clear_session(uid)
+
+    assert db.load_chat_session(uid) == []
 
 
 def test_clear_session_on_unknown_user_is_a_noop():
-    main.clear_session(999999)
+    main.clear_session(999999)  # DELETE on a non-matching row is a no-op, must not raise
 
 
 # --- chat() ------------------------------------------------------------
 
-def test_chat_returns_text_on_end_turn(monkeypatch):
-    main.clear_session(1)
+def test_chat_returns_text_on_end_turn(monkeypatch, user_id_factory):
+    uid = user_id_factory()
     response = make_response([make_block("text", text="Hello there")], "end_turn")
     monkeypatch.setattr(main.client.messages, "create", lambda **kw: response)
 
-    result = main.chat("hi", user_id=1)
+    result = main.chat("hi", user_id=uid)
 
     assert result == "Hello there"
 
 
-def test_chat_runs_tool_then_returns_final_text(monkeypatch):
-    main.clear_session(2)
+def test_chat_runs_tool_then_returns_final_text(monkeypatch, user_id_factory):
+    uid = user_id_factory()
     monkeypatch.setitem(main.TOOL_HANDLERS, "get_expenses", lambda **kw: [])
 
     tool_block = make_block("tool_use", name="get_expenses", input={}, id="tool_1")
@@ -326,10 +365,41 @@ def test_chat_runs_tool_then_returns_final_text(monkeypatch):
 
     monkeypatch.setattr(main.client.messages, "create", fake_create)
 
-    result = main.chat("what did I spend?", user_id=2)
+    result = main.chat("what did I spend?", user_id=uid)
 
     assert result == "No expenses found"
     assert responses == []
+
+
+def test_chat_persists_conversation_to_the_database(monkeypatch, user_id_factory):
+    # The whole point of externalizing session storage: nothing about this
+    # depends on process memory, so it survives a restart between requests.
+    # This test can't simulate an actual restart, but proves the underlying
+    # mechanism — everything chat() needs is read back correctly from what a
+    # prior call wrote, not from anything still sitting in memory.
+    uid = user_id_factory()
+    response = make_response([make_block("text", text="Hello there")], "end_turn")
+    monkeypatch.setattr(main.client.messages, "create", lambda **kw: response)
+
+    main.chat("hi", user_id=uid)
+
+    saved = db.load_chat_session(uid)
+    assert saved[0] == {"role": "user", "content": "hi"}
+    assert saved[1]["role"] == "assistant"
+    assert saved[1]["content"] == [{"type": "text", "text": "Hello there"}]
+
+
+def test_chat_appends_to_previously_persisted_history_across_calls(monkeypatch, user_id_factory):
+    uid = user_id_factory()
+    response = make_response([make_block("text", text="ok")], "end_turn")
+    monkeypatch.setattr(main.client.messages, "create", lambda **kw: response)
+
+    main.chat("first message", user_id=uid)
+    main.chat("second message", user_id=uid)
+
+    saved = db.load_chat_session(uid)
+    user_texts = [m["content"] for m in saved if m["role"] == "user" and isinstance(m["content"], str)]
+    assert user_texts == ["first message", "second message"]
 
 
 # --- stream_chat() -------------------------------------------------------
@@ -353,18 +423,18 @@ class FakeStream:
         return False
 
 
-def test_stream_chat_yields_text_chunks_on_end_turn(monkeypatch):
-    main.clear_session(3)
+def test_stream_chat_yields_text_chunks_on_end_turn(monkeypatch, user_id_factory):
+    uid = user_id_factory()
     final = make_response([make_block("text", text="Hi!")], "end_turn")
     monkeypatch.setattr(main.client.messages, "stream", lambda **kw: FakeStream(["Hi", "!"], final))
 
-    events = list(main.stream_chat("hello", user_id=3))
+    events = list(main.stream_chat("hello", user_id=uid))
 
     assert events == [{"text": "Hi"}, {"text": "!"}]
 
 
-def test_stream_chat_runs_tool_then_streams_final_text(monkeypatch):
-    main.clear_session(4)
+def test_stream_chat_runs_tool_then_streams_final_text(monkeypatch, user_id_factory):
+    uid = user_id_factory()
     monkeypatch.setitem(main.TOOL_HANDLERS, "get_expenses", lambda **kw: [])
 
     tool_block = make_block("tool_use", name="get_expenses", input={}, id="tool_1")
@@ -378,7 +448,7 @@ def test_stream_chat_runs_tool_then_streams_final_text(monkeypatch):
 
     monkeypatch.setattr(main.client.messages, "stream", fake_stream)
 
-    events = list(main.stream_chat("what did I spend?", user_id=4))
+    events = list(main.stream_chat("what did I spend?", user_id=uid))
 
     assert events == [
         {"status": "Looking up expenses…"},
@@ -388,8 +458,8 @@ def test_stream_chat_runs_tool_then_streams_final_text(monkeypatch):
     assert streams == []
 
 
-def test_stream_chat_emits_breakdown_event_for_category_breakdown_tool(monkeypatch):
-    main.clear_session(9)
+def test_stream_chat_emits_breakdown_event_for_category_breakdown_tool(monkeypatch, user_id_factory):
+    uid = user_id_factory()
     breakdown_result = {
         "breakdown": [{"category": "Dining", "total": 42.0, "count": 3, "pct": 100.0}],
         "grand_total": 42.0,
@@ -407,7 +477,7 @@ def test_stream_chat_emits_breakdown_event_for_category_breakdown_tool(monkeypat
 
     monkeypatch.setattr(main.client.messages, "stream", fake_stream)
 
-    events = list(main.stream_chat("breakdown please", user_id=9))
+    events = list(main.stream_chat("breakdown please", user_id=uid))
 
     assert events == [
         {"status": "Calculating breakdown…"},
@@ -416,8 +486,8 @@ def test_stream_chat_emits_breakdown_event_for_category_breakdown_tool(monkeypat
     ]
 
 
-def test_stream_chat_emits_status_for_unmapped_tool(monkeypatch):
-    main.clear_session(7)
+def test_stream_chat_emits_status_for_unmapped_tool(monkeypatch, user_id_factory):
+    uid = user_id_factory()
     monkeypatch.setitem(main.TOOL_HANDLERS, "some_new_tool", lambda **kw: [])
 
     tool_block = make_block("tool_use", name="some_new_tool", input={}, id="tool_1")
@@ -431,24 +501,24 @@ def test_stream_chat_emits_status_for_unmapped_tool(monkeypatch):
 
     monkeypatch.setattr(main.client.messages, "stream", fake_stream)
 
-    events = list(main.stream_chat("do something new", user_id=7))
+    events = list(main.stream_chat("do something new", user_id=uid))
 
     assert events[0] == {"status": "Working…"}
 
 
-def test_stream_chat_emits_status_for_images(monkeypatch):
-    main.clear_session(8)
+def test_stream_chat_emits_status_for_images(monkeypatch, user_id_factory):
+    uid = user_id_factory()
     final = make_response([make_block("text", text="Logged!")], "end_turn")
     monkeypatch.setattr(main.client.messages, "stream", lambda **kw: FakeStream(["Logged!"], final))
     monkeypatch.setattr(main, "_ocr_image", lambda data, media_type: "Total: $5")
 
-    events = list(main.stream_chat("log this", user_id=8, images=[{"data": "x", "media_type": "image/png"}]))
+    events = list(main.stream_chat("log this", user_id=uid, images=[{"data": "x", "media_type": "image/png"}]))
 
     assert events[0] == {"status": "Reading image…"}
 
 
-def test_stream_chat_inserts_space_between_turns_missing_one(monkeypatch):
-    main.clear_session(5)
+def test_stream_chat_inserts_space_between_turns_missing_one(monkeypatch, user_id_factory):
+    uid = user_id_factory()
     monkeypatch.setitem(main.TOOL_HANDLERS, "get_expenses", lambda **kw: [])
 
     tool_block = make_block("tool_use", name="get_expenses", input={}, id="tool_1")
@@ -462,14 +532,14 @@ def test_stream_chat_inserts_space_between_turns_missing_one(monkeypatch):
 
     monkeypatch.setattr(main.client.messages, "stream", fake_stream)
 
-    events = list(main.stream_chat("log two expenses", user_id=5))
+    events = list(main.stream_chat("log two expenses", user_id=uid))
     text = "".join(e["text"] for e in events if "text" in e)
 
     assert text == "I'll log both today. Done!"
 
 
-def test_stream_chat_does_not_double_space_when_turn_already_ends_in_space(monkeypatch):
-    main.clear_session(6)
+def test_stream_chat_does_not_double_space_when_turn_already_ends_in_space(monkeypatch, user_id_factory):
+    uid = user_id_factory()
     monkeypatch.setitem(main.TOOL_HANDLERS, "get_expenses", lambda **kw: [])
 
     tool_block = make_block("tool_use", name="get_expenses", input={}, id="tool_2")
@@ -483,7 +553,7 @@ def test_stream_chat_does_not_double_space_when_turn_already_ends_in_space(monke
 
     monkeypatch.setattr(main.client.messages, "stream", fake_stream)
 
-    events = list(main.stream_chat("log an expense", user_id=6))
+    events = list(main.stream_chat("log an expense", user_id=uid))
     text = "".join(e["text"] for e in events if "text" in e)
 
     assert text == "Logging it. Done!"

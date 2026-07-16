@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 
 from agent import db
 
@@ -591,6 +591,96 @@ def test_recurring_treats_different_amounts_as_separate_unconfirmed_groups(user_
     assert db.get_recurring_expenses() == []
 
 
+def test_recurring_next_expected_date_uses_the_frequency_label_not_measured_avg_gap(user_id):
+    for day in ["2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"]:
+        add_expense(user_id, 5, "Drinks", "Coffee Subscription", day)
+
+    result = db.get_recurring_expenses()
+
+    assert result[0]["frequency"] == "weekly"
+    assert result[0]["next_expected_date"] == "2026-02-02"  # 2026-01-26 + 7 days
+
+
+def test_recurring_next_expected_date_for_monthly_pattern(user_id):
+    for day in ["2026-03-05", "2026-04-05", "2026-05-05", "2026-06-05"]:
+        add_expense(user_id, 1850, "Rent", "Monthly Rent", day)
+
+    result = db.get_recurring_expenses()
+
+    assert result[0]["next_expected_date"] == "2026-07-05"  # 2026-06-05 + 30 days
+
+
+# --- get_insights ------------------------------------------------------------
+
+def test_insights_includes_budget_categories_at_or_over_threshold(user_id):
+    today = date.today().isoformat()
+    db.set_budget("Dining", 100)
+    add_expense(user_id, 85, "Dining", "Dinner", today)
+
+    result = db.get_insights()
+
+    assert len(result) == 1
+    assert result[0]["type"] == "budget"
+    assert result[0]["category"] == "Dining"
+    assert result[0]["key"] == "budget:Dining"
+
+
+def test_insights_omits_budget_categories_comfortably_under_threshold(user_id):
+    db.set_budget("Dining", 300)
+    add_expense(user_id, 50, "Dining", "Dinner", date.today().isoformat())
+
+    assert db.get_insights() == []
+
+
+def test_insights_includes_a_recurring_charge_due_within_the_window(user_id):
+    # Monthly (30-day) pattern whose last occurrence was 27 days ago -> next
+    # expected in 3 days, right at the edge of the 3-day window (inclusive).
+    for offset in (87, 57, 27):
+        day = (date.today() - timedelta(days=offset)).isoformat()
+        add_expense(user_id, 45, "Subscription", "Gym Membership", day)
+
+    result = db.get_insights()
+
+    assert len(result) == 1
+    assert result[0]["type"] == "recurring"
+    assert result[0]["description"] == "Gym Membership"
+    assert result[0]["days_until"] == 3
+    assert result[0]["key"] == "recurring:Gym Membership"
+
+
+def test_insights_excludes_a_recurring_charge_further_out_than_the_window(user_id):
+    # Same monthly pattern, but the last occurrence was only 20 days ago ->
+    # next expected in 10 days, outside the 3-day window.
+    for offset in (80, 50, 20):
+        day = (date.today() - timedelta(days=offset)).isoformat()
+        add_expense(user_id, 45, "Subscription", "Gym Membership", day)
+
+    assert db.get_insights() == []
+
+
+def test_insights_excludes_an_overdue_recurring_charge_not_seen_again(user_id):
+    # Last occurrence was 40 days ago on a 30-day pattern -> "next expected"
+    # is 10 days in the past. Silently missing/cancelled, not "coming up".
+    for offset in (100, 70, 40):
+        day = (date.today() - timedelta(days=offset)).isoformat()
+        add_expense(user_id, 45, "Subscription", "Gym Membership", day)
+
+    assert db.get_insights() == []
+
+
+def test_insights_combines_budget_and_recurring_signals_with_distinct_keys(user_id):
+    db.set_budget("Dining", 100)
+    add_expense(user_id, 85, "Dining", "Dinner", date.today().isoformat())
+    for offset in (87, 57, 27):
+        day = (date.today() - timedelta(days=offset)).isoformat()
+        add_expense(user_id, 45, "Subscription", "Gym Membership", day)
+
+    result = db.get_insights()
+
+    keys = {r["key"] for r in result}
+    assert keys == {"budget:Dining", "recurring:Gym Membership"}
+
+
 # --- get_expenses description_contains ---------------------------------
 
 def test_get_expenses_description_contains_matches_substring(user_id):
@@ -1006,3 +1096,45 @@ def test_increment_api_call_count_is_per_day(user_id):
     db.increment_api_call_count(user_id, "2026-06-28")
     assert db.get_api_call_count(user_id, "2026-06-27") == 1
     assert db.get_api_call_count(user_id, "2026-06-28") == 1
+
+
+# --- usage_events / record_usage -------------------------------------------
+
+def test_record_usage_appears_in_summary(user_id):
+    db.record_usage(user_id, "tool", "save_expense", "freeform")
+
+    summary = db.get_usage_summary()
+
+    assert summary == [{"event_type": "tool", "event_name": "save_expense", "source": "freeform", "count": 1}]
+
+
+def test_get_usage_summary_groups_by_type_name_and_source(user_id):
+    db.record_usage(user_id, "tool", "save_expense", "freeform")
+    db.record_usage(user_id, "tool", "save_expense", "freeform")
+    db.record_usage(user_id, "tool", "save_expense", "chip:Summarize this month")
+    db.record_usage(user_id, "ui", "delete_expense", None)
+
+    summary = db.get_usage_summary()
+
+    counts = {(row["event_type"], row["event_name"], row["source"]): row["count"] for row in summary}
+    assert counts[("tool", "save_expense", "freeform")] == 2
+    assert counts[("tool", "save_expense", "chip:Summarize this month")] == 1
+    assert counts[("ui", "delete_expense", None)] == 1
+
+
+def test_get_usage_summary_since_filters_out_older_events(user_id):
+    db.record_usage(user_id, "tool", "save_expense", "freeform")
+    db._run("UPDATE usage_events SET created_at = '2026-01-01' WHERE event_name = 'save_expense'")
+    db.record_usage(user_id, "ui", "delete_expense", None)
+
+    summary = db.get_usage_summary(since="2026-06-01")
+
+    names = {row["event_name"] for row in summary}
+    assert names == {"delete_expense"}
+
+
+def test_record_usage_swallows_errors_instead_of_raising():
+    # A nonexistent user_id violates the FK constraint — record_usage must not
+    # propagate that, since a logging failure should never break the request
+    # it's attached to (e.g. a tool call that otherwise succeeded).
+    db.record_usage(999999, "tool", "save_expense", "freeform")

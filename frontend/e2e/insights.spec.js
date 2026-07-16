@@ -41,3 +41,18 @@ test("dismissal persists per-category across a reload on the same day", async ({
   // Never-dismissed categories still show up after the reload.
   await expect(page.getByText("Driving is at", { exact: false })).toBeVisible();
 });
+
+// Seed data also plants a 3-occurrence monthly "Gym Membership" pattern whose
+// next charge lands 3 days out — inside the proactive reminder window —
+// independent of the budget insights above (Subscription has no budget set).
+
+test("shows a 'renews soon' reminder for a recurring charge due within the window, dismissible independently of budget insights", async ({ page }) => {
+  await expect(page.getByText("Gym Membership", { exact: false })).toBeVisible();
+  await expect(page.getByText("renews in 3 days", { exact: false })).toBeVisible();
+
+  await page.getByRole("button", { name: "Dismiss Gym Membership reminder" }).click();
+  await expect(page.getByText("Gym Membership", { exact: false })).toHaveCount(0);
+
+  // Budget insights are unaffected by dismissing the recurring reminder.
+  await expect(page.getByText("Dining is at", { exact: false })).toBeVisible();
+});
